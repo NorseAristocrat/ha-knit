@@ -1,0 +1,215 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Add a Knit device",
+        "description": "Knit your sensors into a smart device. Its settings can also be changed on its Knit card.",
+        "menu_options": {
+          "light": "Light: motion control and light level",
+          "auto_off_switch": "Motion-controlled device: off once the room is empty (presence never turns it on)",
+          "appliance": "Appliance: running / full / empty from its power (a dishwasher, a washing machine)"
+        }
+      },
+      "light": {
+        "title": "Light",
+        "description": "Pick the light (or a plug-controlled light's switch) and the sensors it should follow.",
+        "data": {
+          "light": "Light or switch",
+          "name": "Name",
+          "presence": "Presence sensors (occupied while any is on)",
+          "illuminance": "Light level sensors (lx)",
+          "pause": "Pause while this is on (e.g. guests)",
+          "start_on": "Turn its automatic features on now"
+        },
+        "data_description": {
+          "presence": "Motion uses these. Leave empty for no motion control.",
+          "illuminance": "One or more. With several, their average is used, so a room without a sensor can follow the rooms around it.",
+          "pause": "Nothing happens while this entity is on.",
+          "start_on": "Leave this off if an automation already controls it, so the two don't both act on it."
+        }
+      },
+      "auto_off_switch": {
+        "title": "Motion-controlled device",
+        "description": "A device that should go off once nobody's around.",
+        "data": {
+          "light": "Device",
+          "name": "Name",
+          "presence": "Presence sensors (occupied while any is on)",
+          "pause": "Pause while this is on (e.g. guests)",
+          "off_after_outage": "Off again if it comes back on after a power cut",
+          "start_on": "Turn Motion control on now"
+        },
+        "data_description": {
+          "presence": "It goes off once these have all been clear for its timeout. Presence never turns it on.",
+          "off_after_outage": "For a device that shouldn't come back on by itself.",
+          "pause": "Nothing happens while this entity is on.",
+          "start_on": "Leave this off if an automation already controls it, so the two don't both act on it."
+        }
+      },
+      "appliance": {
+        "title": "Appliance",
+        "description": "A dishwasher, washing machine or dryer on a smart plug that reports power.",
+        "data": {
+          "name": "Name",
+          "power": "Power sensor (W)",
+          "door": "Door sensor",
+          "empty_name": "Name for Empty",
+          "running_name": "Name for Running",
+          "full_name": "Name for Full"
+        },
+        "data_description": {
+          "power": "Its smart plug's power. Running once it's been above Running above for a while; finished once it's been below it for a while.",
+          "door": "On = open. Open for a while once it's not drawing power: emptied.",
+          "empty_name": "Its status once emptied (and before the first cycle).",
+          "running_name": "Its status while a cycle runs.",
+          "full_name": "Its status once a cycle has finished, until it's emptied."
+        }
+      }
+    },
+    "abort": {
+      "already_configured": "This is already a Knit device."
+    },
+    "error": {
+      "same_names": "Give each status a different name."
+    }
+  },
+  "options": {
+    "step": {
+      "light": {
+        "title": "Sensors",
+        "data": {
+          "light": "Light or switch",
+          "name": "Name",
+          "presence": "Presence sensors (occupied while any is on)",
+          "illuminance": "Light level sensors (lx)",
+          "pause": "Pause while this is on (e.g. guests)",
+          "start_on": "Turn its automatic features on now"
+        },
+        "data_description": {
+          "presence": "Motion uses these. Leave empty for no motion control.",
+          "illuminance": "One or more. With several, their average is used, so a room without a sensor can follow the rooms around it.",
+          "pause": "Nothing happens while this entity is on.",
+          "start_on": "Leave this off if an automation already controls it, so the two don't both act on it."
+        }
+      },
+      "auto_off_switch": {
+        "title": "Sensors",
+        "data": {
+          "light": "Device",
+          "name": "Name",
+          "presence": "Presence sensors (occupied while any is on)",
+          "pause": "Pause while this is on (e.g. guests)",
+          "off_after_outage": "Off again if it comes back on after a power cut",
+          "start_on": "Turn Motion control on now"
+        },
+        "data_description": {
+          "presence": "It goes off once these have all been clear for its timeout. Presence never turns it on.",
+          "off_after_outage": "For a device that shouldn't come back on by itself.",
+          "pause": "Nothing happens while this entity is on.",
+          "start_on": "Leave this off if an automation already controls it, so the two don't both act on it."
+        }
+      },
+      "appliance": {
+        "title": "Sensors",
+        "data": {
+          "name": "Name",
+          "power": "Power sensor (W)",
+          "door": "Door sensor",
+          "empty_name": "Name for Empty",
+          "running_name": "Name for Running",
+          "full_name": "Name for Full"
+        },
+        "data_description": {
+          "power": "Its smart plug's power. Running once it's been above Running above for a while; finished once it's been below it for a while.",
+          "door": "On = open. Open for a while once it's not drawing power: emptied.",
+          "empty_name": "Its status once emptied (and before the first cycle).",
+          "running_name": "Its status while a cycle runs.",
+          "full_name": "Its status once a cycle has finished, until it's emptied."
+        }
+      }
+    },
+    "error": {
+      "same_names": "Give each status a different name."
+    }
+  },
+  "entity": {
+    "switch": {
+      "motion": {
+        "name": "Motion"
+      },
+      "light_level": {
+        "name": "Light level"
+      },
+      "auto_off": {
+        "name": "Motion control"
+      }
+    },
+    "number": {
+      "auto_off_time": {
+        "name": "Motion timeout"
+      },
+      "dim_time": {
+        "name": "Motion dim before off"
+      },
+      "dark_below": {
+        "name": "Light level dark below"
+      },
+      "light_above": {
+        "name": "Light level light above"
+      },
+      "off_after": {
+        "name": "Light level off after"
+      },
+      "running_above": {
+        "name": "Running above"
+      },
+      "running_after": {
+        "name": "Running after"
+      },
+      "finished_after": {
+        "name": "Finished after"
+      },
+      "cycle_length": {
+        "name": "Cycle length"
+      },
+      "empty_after": {
+        "name": "Emptied after door open"
+      }
+    },
+    "binary_sensor": {
+      "occupied": {
+        "name": "Occupied"
+      },
+      "dark": {
+        "name": "Dark"
+      }
+    },
+    "sensor": {
+      "auto_off_ends": {
+        "name": "Motion timeout ends"
+      },
+      "off_when_light_ends": {
+        "name": "Off when light ends"
+      },
+      "light": {
+        "name": "Light"
+      },
+      "illuminance": {
+        "name": "Light level"
+      },
+      "cycle_ends": {
+        "name": "Cycle ends"
+      }
+    },
+    "select": {
+      "status": {
+        "name": "Status",
+        "state": {
+          "Empty": "Empty",
+          "Running": "Running",
+          "Full": "Full"
+        }
+      }
+    }
+  }
+}

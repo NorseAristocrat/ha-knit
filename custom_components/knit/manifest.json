@@ -1,0 +1,19 @@
+{
+  "domain": "knit",
+  "name": "Knit",
+  "codeowners": [
+    "@NorseAristocrat"
+  ],
+  "config_flow": true,
+  "dependencies": [
+    "frontend",
+    "http",
+    "lovelace"
+  ],
+  "documentation": "https://github.com/NorseAristocrat/ha-knit",
+  "integration_type": "device",
+  "iot_class": "calculated",
+  "issue_tracker": "https://github.com/NorseAristocrat/ha-knit/issues",
+  "requirements": [],
+  "version": "0.5.8"
+}
