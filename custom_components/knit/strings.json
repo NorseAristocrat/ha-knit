@@ -203,12 +203,7 @@
     },
     "select": {
       "status": {
-        "name": "Status",
-        "state": {
-          "Empty": "Empty",
-          "Running": "Running",
-          "Full": "Full"
-        }
+        "name": "Status"
       }
     }
   }

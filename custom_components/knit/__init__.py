@@ -8,6 +8,7 @@ from pathlib import Path
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers.typing import ConfigType
 from homeassistant.loader import async_get_integration
 
@@ -16,6 +17,8 @@ from .const import CARD_FILE, CARD_URL, CONF_TYPE, DOMAIN, TYPE_APPLIANCE
 from .controller import LightController
 
 _LOGGER = logging.getLogger(__name__)
+# set up in the UI only (Settings → Devices & services), nothing in configuration.yaml
+CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
 PLATFORMS = [Platform.SWITCH, Platform.NUMBER, Platform.BINARY_SENSOR, Platform.SENSOR, Platform.SELECT]
 
 
