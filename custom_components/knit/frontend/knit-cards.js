@@ -60,7 +60,7 @@
  * them all. `wide: false` keeps it at its own width.
  */
 
-const SLC_VERSION = "33";
+const SLC_VERSION = "34";
 const PENDING_MS = 8000;
 const RING = 2 * Math.PI * 19;
 // which cards are open (and their More controls), so a redraw (as the editor does) keeps it
@@ -2340,7 +2340,7 @@ class SmartLightSectionEditor extends HTMLElement {
  * how it tells running / finished / emptied, as one sentence with the values in place.
  *
  *   type: custom:knit-appliance-card
- *   device: <the Knit appliance>
+ *   device: <the Knit appliance>          # or entity: select.knit_washing_machine_status (any of its entities)
  *   name: Washing machine                # optional: else the device's name
  *   icon: mdi:washing-machine
  *   color: blue                          # or primary: [r, g, b]
@@ -2372,10 +2372,10 @@ class KnitApplianceCard extends HTMLElement {
   }
 
   setConfig(config) {
-    if (!config?.device) throw new Error("Pick a Knit appliance");
+    if (!config?.device && !config?.entity) throw new Error("Pick a Knit appliance (device), or one of its entities (entity)");
     this._config = { ...config };
     this._pending = {};
-    const mem = OPEN.get(config.device);
+    const mem = OPEN.get(config.device || config.entity);
     this._open = mem?.open ?? this._open ?? false;
     this._ctlOpen = mem?.ctl ?? this._ctlOpen ?? false;
     this._drawn = false;
@@ -2385,6 +2385,16 @@ class KnitApplianceCard extends HTMLElement {
   set hass(hass) {
     this._hass = hass;
     if (!this._config) return;
+    // given one of its entities (e.g. its Status): the device it belongs to
+    if (!this._config.device && this._config.entity) {
+      const device = hass.entities?.[this._config.entity]?.device_id;
+      if (!device) {
+        if (!this.shadowRoot) this.attachShadow({ mode: "open" });
+        this.shadowRoot.innerHTML = `<ha-card style="padding:16px">Waiting for the Knit appliance…</ha-card>`;
+        return;
+      }
+      this._config.device = device;
+    }
     if (!this._drawn) this._dom();
     else this._render();
   }
