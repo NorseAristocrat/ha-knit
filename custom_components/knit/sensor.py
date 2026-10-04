@@ -73,8 +73,13 @@ class LightRef(LiveEntity, SensorEntity, RestoreEntity):
 
     @property
     def extra_state_attributes(self) -> dict:
-        restore = getattr(getattr(self.controller, "engine", None), "restore", None)
-        return {**super().extra_state_attributes, **({"dimmed_from": restore} if restore is not None else {})}
+        engine = getattr(self.controller, "engine", None)
+        restore = getattr(engine, "restore", None)
+        attrs = {**super().extra_state_attributes, **({"dimmed_from": restore} if restore is not None else {})}
+        # with a pause entity: whether it's paused now (the card says "Automations paused")
+        if getattr(self.controller, "pause", None):
+            attrs["paused"] = bool(getattr(engine, "paused", False))
+        return attrs
 
 
 class Ends(LiveEntity, SensorEntity):

@@ -15,5 +15,5 @@
   "iot_class": "calculated",
   "issue_tracker": "https://github.com/NorseAristocrat/ha-knit/issues",
   "requirements": [],
-  "version": "0.6.0"
+  "version": "0.6.1"
 }

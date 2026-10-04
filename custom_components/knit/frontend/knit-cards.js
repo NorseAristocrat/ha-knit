@@ -60,7 +60,7 @@
  * them all. `wide: false` keeps it at its own width.
  */
 
-const SLC_VERSION = "34";
+const SLC_VERSION = "35";
 const PENDING_MS = 8000;
 const RING = 2 * Math.PI * 19;
 // which cards are open (and their More controls), so a redraw (as the editor does) keeps it
@@ -270,6 +270,7 @@ const withFound = (raw, hass) => {
   const c = {
     ...raw,
     managed: true,
+    ref: f.light, // the device's light sensor: says whether it's paused
     // Motion is the Motion control switch (it covers the timeout; older versions had a separate one)
     motion: fill("motion", { presence: f.occupied }),
     auto_off: fill("auto_off", {
@@ -1305,10 +1306,14 @@ class SmartLightCard extends HTMLElement {
       sub = `Off in ${clock(Math.min(...running.map((x) => x.left)))}`;
     else {
       const bits = [];
+      const paused = this._st(c.ref)?.attributes.paused;
       if (sec.includes("state")) bits.push(on ? "On" : "Off");
-      if (sec.includes("brightness") && on && dim && pct) bits.push(`${pct}%`);
+      // (no brightness while paused, so "Automations paused" fits on a half-width card)
+      if (sec.includes("brightness") && on && dim && pct && !paused) bits.push(`${pct}%`);
       const se = this._st(c.secondary_entity);
       if (se && !NO_VALUE.includes(se.state)) bits.push(`${num(se.state) === "—" ? se.state : num(se.state)}${se.attributes.unit_of_measurement ? ` ${se.attributes.unit_of_measurement}` : ""}`);
+      // its pause entity is on: Knit leaves it alone, so say why nothing happens
+      if (paused) bits.push("Automations paused");
       sub = bits.join(" · ");
     }
     this.$("ha-card").classList.toggle("on", on);
