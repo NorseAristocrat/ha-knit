@@ -60,7 +60,7 @@
  * them all. `wide: false` keeps it at its own width.
  */
 
-const SLC_VERSION = "35";
+const SLC_VERSION = "36";
 const PENDING_MS = 8000;
 const RING = 2 * Math.PI * 19;
 // which cards are open (and their More controls), so a redraw (as the editor does) keeps it
@@ -2352,8 +2352,10 @@ class SmartLightSectionEditor extends HTMLElement {
  */
 const APPLIANCE_ICONS = { empty: "mdi:checkbox-blank-circle-outline", running: "mdi:play-circle-outline", full: "mdi:check-circle-outline" };
 const APPLIANCE_CSS = `
-  .tile.full .face { animation: pulse 2s ease-in-out infinite; }
-  @keyframes pulse { 50% { box-shadow: inset 0 0 0 2px var(--soft); } }
+  /* Full: pulses outside its border, as the Home page's tiles do (on the card, or on the tile and
+     panel while it's spread across the row, where they carry the border) */
+  :host(:not(.wide)) ha-card.full, :host(.wide) ha-card.full .tile, :host(.wide) ha-card.full .panel { animation: pulse 2s ease-in-out infinite; }
+  @keyframes pulse { 50% { box-shadow: 0 0 0 3px var(--soft); } }
   .srcs { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
   .srcs .tr { display: flex; align-items: center; gap: 8px; min-width: 0; --mdc-icon-size: 18px; }
   .srcs .tr ha-icon { flex: none; opacity: 0.8; }
@@ -2615,6 +2617,7 @@ class KnitApplianceCard extends HTMLElement {
     tile.querySelector(".s").textContent = sub;
     tile.classList.toggle("on", key !== "Empty" && Boolean(st));
     tile.classList.toggle("full", key === "Full");
+    this.$("ha-card").classList.toggle("full", key === "Full");
     tile.querySelector(".fill").style.width = left !== undefined && total ? `${clamp(100 * (1 - left / total), 0, 100)}%` : "0%";
     this.$("ha-card").classList.toggle("on", key !== "Empty" && Boolean(st));
     if (!this._open) return;
