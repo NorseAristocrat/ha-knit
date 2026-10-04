@@ -1,3 +1,10 @@
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="images/dark_icon.png">
+    <img src="images/icon.png" alt="Knit" width="128">
+  </picture>
+</p>
+
 # Knit
 
 Knit your sensors into smart devices, then put each device on your dashboard with its own card.
