@@ -79,6 +79,9 @@ class LightRef(LiveEntity, SensorEntity, RestoreEntity):
         # with a pause entity: whether it's paused now (the card says "Automations paused")
         if getattr(self.controller, "pause", None):
             attrs["paused"] = bool(getattr(engine, "paused", False))
+        # with people to follow: whether they're all away (nothing turns it on)
+        if getattr(self.controller, "people", None):
+            attrs["away"] = bool(getattr(engine, "away", False))
         return attrs
 
 

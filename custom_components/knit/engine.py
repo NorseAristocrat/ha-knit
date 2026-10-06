@@ -15,6 +15,9 @@ Behaviour, per light:
                seconds the light goes off. With Motion off it also turns the light on when
                it gets dark. Off: the light level is ignored.
   Paused       (an entity such as guests being on): nothing happens at all.
+  Away         (everyone it follows is away from home): nothing turns it on (presence, the dark),
+               but it still goes off as usual. Someone coming home to an occupied, dark room
+               turns it on.
   turn_on      False for a motion-controlled device: presence never turns it on,
                it only goes off once the room has been empty for the timeout.
 """
@@ -68,6 +71,7 @@ class Engine:
     lux: float | None = None
     shared_dark: bool | None = None  # a dark sensor shared with other rooms, instead of lux
     paused: bool = False
+    away: bool = False  # everyone is away: nothing turns it on
     dark: bool | None = None
     auto: Countdown | None = None  # the auto-off, dim included
     dim_at: datetime | None = None
@@ -99,7 +103,7 @@ class Engine:
         if occupied:
             out += self._cancel_auto(restore=True)
             s = self.settings
-            if s.motion and s.turn_on and not self.light_on and (not s.light_level or self.dark):
+            if s.motion and s.turn_on and not self.light_on and not self.away and (not s.light_level or self.dark):
                 out.append(self._turn_on())
         else:
             out += self._maybe_start_auto(now)
@@ -140,6 +144,19 @@ class Engine:
     def set_shared_dark(self, dark: bool | None, now: datetime) -> list[Action]:
         self.shared_dark = dark
         return self._update_dark(now)
+
+    def set_away(self, away: bool, now: datetime) -> list[Action]:
+        """Everyone away (nothing turns it on), or someone home again."""
+        if away == self.away:
+            return []
+        self.away = away
+        if away or self.paused or self.light_on:
+            return []
+        # home again: an occupied, dark room (Motion), or just dark (Light level alone), turns it on
+        s = self.settings
+        if s.motion and s.turn_on and self.occupied and (not s.light_level or self.dark):
+            return [self._turn_on()]
+        return self._on_when_dark()
 
     def set_paused(self, paused: bool, now: datetime) -> list[Action]:
         if paused == self.paused:
@@ -248,7 +265,7 @@ class Engine:
 
     def _on_when_dark(self) -> list[Action]:
         s = self.settings
-        if not self.paused and not s.motion and s.light_level and self.dark and not self.light_on:
+        if not self.paused and not self.away and not s.motion and s.light_level and self.dark and not self.light_on:
             return [self._turn_on()]
         return []
 

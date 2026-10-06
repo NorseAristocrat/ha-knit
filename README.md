@@ -21,7 +21,11 @@ Set a device up once: no helpers, automations or scripts.
 - **Light level**: once the room has been light (above Light above) for Off after, the light goes
   off. With Motion off, it turns the light on when it gets dark instead. Several light sensors are
   averaged, so a room with no sensor of its own can follow the rooms around it.
-- **Pause**: optionally, nothing happens while an entity you pick is on (guests, for example).
+- **Pause**: optionally, nothing happens while the entities you pick are on (guest mode, for
+  example): any one of them, or only once all of them are. The card says Automations paused.
+- **Nobody home**: optionally, people (or device trackers) to follow. While all of them are away,
+  nothing turns the light on (a pet or a robot vacuum won't), but it still goes off as usual;
+  someone coming home to an occupied, dark room turns it on.
 
 **Motion-controlled device**: a device that should go off once nobody's around: off once the
 room has been empty for its Motion timeout; presence never turns it on. Optionally it's switched

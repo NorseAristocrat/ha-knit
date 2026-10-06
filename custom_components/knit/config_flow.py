@@ -16,6 +16,8 @@ from .const import (
     CONF_LIGHT,
     CONF_OFF_AFTER_OUTAGE,
     CONF_PAUSE,
+    CONF_PAUSE_MATCH,
+    CONF_PEOPLE,
     CONF_POWER,
     CONF_PRESENCE,
     CONF_START_ON,
@@ -31,8 +33,8 @@ CONF_NAME = "name"
 
 def _opt(defaults: dict, key: str):
     v = defaults.get(key)
-    # one light sensor (entries made before several could be picked): shown as a list now
-    if key == CONF_ILLUMINANCE and isinstance(v, str):
+    # one entity (entries made before several could be picked): shown as a list now
+    if key in (CONF_ILLUMINANCE, CONF_PAUSE) and isinstance(v, str):
         v = [v]
     return vol.Optional(key, description={"suggested_value": v} if v not in (None, "", []) else None)
 
@@ -43,8 +45,8 @@ def _ent(**kw):
 
 # the fields each kind of device can change later (options)
 OPTION_FIELDS = {
-    TYPE_LIGHT: (CONF_PRESENCE, CONF_ILLUMINANCE, CONF_PAUSE),
-    TYPE_SWITCH: (CONF_PRESENCE, CONF_PAUSE, CONF_OFF_AFTER_OUTAGE),
+    TYPE_LIGHT: (CONF_PRESENCE, CONF_ILLUMINANCE, CONF_PAUSE, CONF_PAUSE_MATCH, CONF_PEOPLE),
+    TYPE_SWITCH: (CONF_PRESENCE, CONF_PAUSE, CONF_PAUSE_MATCH, CONF_OFF_AFTER_OUTAGE),
     TYPE_APPLIANCE: (CONF_DOOR, *CONF_STATUS_NAMES.values()),
 }
 
@@ -66,7 +68,13 @@ def _schema(kind: str, d: dict) -> dict:
     fields = {_opt(d, CONF_PRESENCE): _ent(domain="binary_sensor", multiple=True)}
     if kind == TYPE_LIGHT:
         fields[_opt(d, CONF_ILLUMINANCE)] = _ent(domain="sensor", device_class="illuminance", multiple=True)
-    fields[_opt(d, CONF_PAUSE)] = _ent(domain=["input_boolean", "binary_sensor", "switch"])
+    fields[_opt(d, CONF_PAUSE)] = _ent(domain=["input_boolean", "binary_sensor", "switch"], multiple=True)
+    fields[vol.Optional(CONF_PAUSE_MATCH, default=d.get(CONF_PAUSE_MATCH) or "any")] = selector.SelectSelector(
+        selector.SelectSelectorConfig(options=["any", "all"], translation_key=CONF_PAUSE_MATCH, mode=selector.SelectSelectorMode.LIST)
+    )
+    # a motion-controlled device is never turned on, so nobody being home changes nothing for it
+    if kind == TYPE_LIGHT:
+        fields[_opt(d, CONF_PEOPLE)] = _ent(domain=["person", "device_tracker"], multiple=True)
     if kind == TYPE_SWITCH:
         fields[vol.Optional(CONF_OFF_AFTER_OUTAGE, default=bool(d.get(CONF_OFF_AFTER_OUTAGE, True)))] = selector.BooleanSelector()
     return fields

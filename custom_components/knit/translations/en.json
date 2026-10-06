@@ -18,14 +18,18 @@
           "name": "Name",
           "presence": "Presence sensors (occupied while any is on)",
           "illuminance": "Light level sensors (lx)",
-          "pause": "Pause while this is on (e.g. guests)",
-          "start_on": "Turn its automatic features on now"
+          "pause": "Pause while these are on (e.g. guests)",
+          "start_on": "Turn its automatic features on now",
+          "pause_match": "Pause when",
+          "people": "Nobody home: people to follow"
         },
         "data_description": {
           "presence": "Motion uses these. Leave empty for no motion control.",
           "illuminance": "One or more. With several, their average is used, so a room without a sensor can follow the rooms around it.",
-          "pause": "Nothing happens while this entity is on.",
-          "start_on": "Leave this off if an automation already controls it, so the two don't both act on it."
+          "pause": "Knit leaves it alone while they're on: nothing turns it on or off by itself, and its card says Automations paused.",
+          "start_on": "Leave this off if an automation already controls it, so the two don't both act on it.",
+          "pause_match": "With several pause entities: any one of them on, or only once all of them are.",
+          "people": "While all of them are away, nothing turns the light on (presence, the dark), but it still goes off as usual. Someone coming home to an occupied, dark room turns it on."
         }
       },
       "auto_off_switch": {
@@ -35,15 +39,17 @@
           "light": "Device",
           "name": "Name",
           "presence": "Presence sensors (occupied while any is on)",
-          "pause": "Pause while this is on (e.g. guests)",
+          "pause": "Pause while these are on (e.g. guests)",
           "off_after_outage": "Off again if it comes back on after a power cut",
-          "start_on": "Turn Motion control on now"
+          "start_on": "Turn Motion control on now",
+          "pause_match": "Pause when"
         },
         "data_description": {
           "presence": "It goes off once these have all been clear for its timeout. Presence never turns it on.",
           "off_after_outage": "For a device that shouldn't come back on by itself.",
-          "pause": "Nothing happens while this entity is on.",
-          "start_on": "Leave this off if an automation already controls it, so the two don't both act on it."
+          "pause": "Knit leaves it alone while they're on: nothing turns it on or off by itself, and its card says Automations paused.",
+          "start_on": "Leave this off if an automation already controls it, so the two don't both act on it.",
+          "pause_match": "With several pause entities: any one of them on, or only once all of them are."
         }
       },
       "appliance": {
@@ -82,14 +88,18 @@
           "name": "Name",
           "presence": "Presence sensors (occupied while any is on)",
           "illuminance": "Light level sensors (lx)",
-          "pause": "Pause while this is on (e.g. guests)",
-          "start_on": "Turn its automatic features on now"
+          "pause": "Pause while these are on (e.g. guests)",
+          "start_on": "Turn its automatic features on now",
+          "pause_match": "Pause when",
+          "people": "Nobody home: people to follow"
         },
         "data_description": {
           "presence": "Motion uses these. Leave empty for no motion control.",
           "illuminance": "One or more. With several, their average is used, so a room without a sensor can follow the rooms around it.",
-          "pause": "Nothing happens while this entity is on.",
-          "start_on": "Leave this off if an automation already controls it, so the two don't both act on it."
+          "pause": "Knit leaves it alone while they're on: nothing turns it on or off by itself, and its card says Automations paused.",
+          "start_on": "Leave this off if an automation already controls it, so the two don't both act on it.",
+          "pause_match": "With several pause entities: any one of them on, or only once all of them are.",
+          "people": "While all of them are away, nothing turns the light on (presence, the dark), but it still goes off as usual. Someone coming home to an occupied, dark room turns it on."
         }
       },
       "auto_off_switch": {
@@ -98,15 +108,17 @@
           "light": "Device",
           "name": "Name",
           "presence": "Presence sensors (occupied while any is on)",
-          "pause": "Pause while this is on (e.g. guests)",
+          "pause": "Pause while these are on (e.g. guests)",
           "off_after_outage": "Off again if it comes back on after a power cut",
-          "start_on": "Turn Motion control on now"
+          "start_on": "Turn Motion control on now",
+          "pause_match": "Pause when"
         },
         "data_description": {
           "presence": "It goes off once these have all been clear for its timeout. Presence never turns it on.",
           "off_after_outage": "For a device that shouldn't come back on by itself.",
-          "pause": "Nothing happens while this entity is on.",
-          "start_on": "Leave this off if an automation already controls it, so the two don't both act on it."
+          "pause": "Knit leaves it alone while they're on: nothing turns it on or off by itself, and its card says Automations paused.",
+          "start_on": "Leave this off if an automation already controls it, so the two don't both act on it.",
+          "pause_match": "With several pause entities: any one of them on, or only once all of them are."
         }
       },
       "appliance": {
@@ -204,6 +216,14 @@
     "select": {
       "status": {
         "name": "Status"
+      }
+    }
+  },
+  "selector": {
+    "pause_match": {
+      "options": {
+        "any": "Any of them is on",
+        "all": "All of them are on"
       }
     }
   }

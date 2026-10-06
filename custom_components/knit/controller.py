@@ -6,7 +6,7 @@ from __future__ import annotations
 import logging
 from datetime import datetime
 
-from homeassistant.const import STATE_ON, STATE_UNAVAILABLE, STATE_UNKNOWN
+from homeassistant.const import STATE_HOME, STATE_ON, STATE_UNAVAILABLE, STATE_UNKNOWN
 from homeassistant.core import Event, EventStateChangedData, HomeAssistant, callback
 from homeassistant.helpers.dispatcher import async_dispatcher_send
 from homeassistant.helpers.event import async_track_point_in_utc_time, async_track_state_change_event
@@ -17,6 +17,8 @@ from .const import (
     CONF_LIGHT,
     CONF_OFF_AFTER_OUTAGE,
     CONF_PAUSE,
+    CONF_PAUSE_MATCH,
+    CONF_PEOPLE,
     CONF_PRESENCE,
     CONF_TYPE,
     SIGNAL_UPDATE,
@@ -44,7 +46,11 @@ class LightController:
         lux = conf.get(CONF_ILLUMINANCE) or []
         # one or more light sensors (a single one in entries made before 0.3)
         self.illuminance: list[str] = [lux] if isinstance(lux, str) else list(lux)
-        self.pause: str | None = conf.get(CONF_PAUSE) or None
+        # one entity in entries made before several could be picked
+        pause = conf.get(CONF_PAUSE) or []
+        self.pause: list[str] = [pause] if isinstance(pause, str) else list(pause)
+        self.pause_all: bool = conf.get(CONF_PAUSE_MATCH) == "all"
+        self.people: list[str] = list(conf.get(CONF_PEOPLE) or [])
         self.engine = Engine()
         # a feature with no sensor is off (and has no switch): with only a light sensor, the
         # light follows the light level (on when dark, off when light)
@@ -71,11 +77,11 @@ class LightController:
         # still dimmed from before a restart? (someone coming back then puts it back)
         e.resume()
         e.occupied = self._occupied()
-        e.paused = self._is_on(self.pause)
+        e.paused = self._paused()
+        e.away = self._away()
         e.set_lux(self.lux(), now)
         watch = [self.light, *self.presence, *self.illuminance]
-        if self.pause:
-            watch.append(self.pause)
+        watch += self.pause + self.people
         self._unsubs.append(async_track_state_change_event(self.hass, watch, self._changed))
         self._started = True
         # the light on in an empty room when it starts: count down
@@ -130,8 +136,10 @@ class LightController:
             out += e.set_occupied(self._occupied(), now)
         if eid in self.illuminance:
             out += e.set_lux(self.lux(), now)
-        if eid == self.pause:
-            out += e.set_paused(self._is_on(self.pause), now)
+        if eid in self.pause:
+            out += e.set_paused(self._paused(), now)
+        if eid in self.people:
+            out += e.set_away(self._away(), now)
         self._do(out)
 
     # ---- readings -----------------------------------------------------------------------
@@ -154,6 +162,20 @@ class LightController:
             except ValueError:
                 continue
         return sum(values) / len(values) if values else None
+
+    def _paused(self) -> bool:
+        """Any (or, set so, all) of the pause entities on."""
+        if not self.pause:
+            return False
+        ons = [self._is_on(eid) for eid in self.pause]
+        return all(ons) if self.pause_all else any(ons)
+
+    def _away(self) -> bool:
+        """Everyone it follows away from home. Anyone home, or not known yet, counts as home."""
+        if not self.people:
+            return False
+        states = [self.hass.states.get(eid) for eid in self.people]
+        return all(st is not None and st.state not in NO_VALUE and st.state != STATE_HOME for st in states)
 
     def _is_on(self, eid: str | None) -> bool:
         st = self.hass.states.get(eid) if eid else None

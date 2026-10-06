@@ -198,6 +198,33 @@ class AutoOff(unittest.TestCase):
         # in before the light has reported off
         self.assertEqual(kinds(e.set_occupied(True, at(300.5))), [(ON, 200)])
 
+    def test_away_presence_does_not_turn_on(self):
+        e = make(dark_below=5)
+        e.set_occupied(False, T0)
+        e.set_away(True, at(1))
+        self.assertEqual(kinds(e.set_occupied(True, at(10))), [])  # a pet, the vacuum
+
+    def test_away_still_goes_off(self):
+        e = make(dark_below=5)
+        e.set_light(True, 200, T0)
+        e.set_away(True, at(0))
+        e.set_occupied(False, at(1))
+        e.tick(at(241))
+        self.assertEqual(kinds(e.tick(at(301))), [(OFF, None)])
+
+    def test_away_light_level_does_not_turn_on(self):
+        e = make(dark_below=5, motion=False)
+        e.set_lux(20, T0)
+        e.set_away(True, at(1))
+        self.assertEqual(kinds(e.set_lux(1, at(10))), [])
+
+    def test_home_again_to_occupied_dark_room_turns_on(self):
+        e = make(dark_below=5)
+        e.set_occupied(False, T0)
+        e.set_away(True, at(1))
+        e.set_occupied(True, at(10))
+        self.assertEqual(kinds(e.set_away(False, at(20))), [(ON, None)])
+
     def test_light_on_by_hand_in_empty_room_counts_down(self):
         e = make(dark_below=5)
         e.set_occupied(False, T0)
