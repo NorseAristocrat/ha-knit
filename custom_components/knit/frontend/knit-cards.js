@@ -20,6 +20,7 @@
  *   icon: mdi:floor-lamp-outline
  *   primary: [216, 196, 151]                 # the card's colour; every other shade is worked out from it
  *                                            # (or color: sand | red | blue | green | teal | steel | purple)
+ *   radius: 15                               # the card's corner radius in px (0 to 30)
  *   secondary: [state, brightness, countdown]   # the line under the name
  *   secondary_entity: sensor.x               # optional: that entity's state added to the line
  *   timers:                                  # optional: other countdowns that turn it off, shown with
@@ -60,7 +61,7 @@
  * them all. `wide: false` keeps it at its own width.
  */
 
-const SLC_VERSION = "38";
+const SLC_VERSION = "39";
 const PENDING_MS = 8000;
 const RING = 2 * Math.PI * 19;
 // which cards are open (and their More controls), so a redraw (as the editor does) keeps it
@@ -377,13 +378,20 @@ const shades = (c, dark) => {
     --well: ${dark ? "rgba(255, 255, 255, 0.06)" : "rgba(0, 0, 0, 0.05)"};`;
 };
 
-const CSS = (c) => `
-  :host { ${shades(c, true)} }
+// the card's corner radius in px (`radius:`, 15 unless set; 0 to 30)
+const RADIUS = 15;
+const radiusOf = (c) => {
+  const r = Number(c?.radius);
+  return c?.radius === undefined || c?.radius === "" || !Number.isFinite(r) ? RADIUS : clamp(r, 0, 30);
+};
+const CSS = (c, radius = RADIUS) => `
+  /* --r: the card's corners; --ri: the inside of its 1px border; --rc: the controls in the panel */
+  :host { ${shades(c, true)} --r: ${radius}px; --ri: ${Math.max(0, radius - 1)}px; --rc: ${Math.min(radius, 15)}px; }
   :host(.light) { ${shades(c, false)} }
   [hidden] { display: none !important; }
   /* the tile and the panel it opens are one box */
   ha-card {
-    overflow: hidden; border-radius: 15px; border: 1px solid var(--edge); color: var(--primary-text-color);
+    overflow: hidden; border-radius: var(--r); border: 1px solid var(--edge); color: var(--primary-text-color);
     background: var(--ha-card-background, var(--card-background-color, #1c1c1c)); transition: border-color 0.2s, box-shadow 0.2s;
   }
   ha-card.on { border-color: var(--soft); box-shadow: 0 3px 8px 0 rgba(0, 0, 0, 0.25); }
@@ -434,14 +442,14 @@ const CSS = (c) => `
   :host(.wide) .tile {
     height: calc(60px + var(--tab-x)); padding-bottom: var(--tab-x); margin-bottom: -1px; z-index: 1; overflow: visible;
     transition: none; /* its fill at once, covering the panel's top edge */
-    border: 1px solid var(--edge); border-bottom: none; border-radius: 15px 15px 0 0;
+    border: 1px solid var(--edge); border-bottom: none; border-radius: var(--r) var(--r) 0 0;
     background-color: var(--ha-card-background, var(--card-background-color, #1c1c1c));
   }
   /* the row is (card width + gap) / its share wide; the panel starts at the row's left edge */
   :host(.wide) .panel {
     box-sizing: border-box; width: calc((100% + var(--wide-gap)) / var(--tile-w) - var(--wide-gap));
     margin-left: calc((100% + var(--wide-gap)) / var(--tile-w) * var(--tile-x) * -1);
-    border: 1px solid var(--edge); border-radius: 15px;
+    border: 1px solid var(--edge); border-radius: var(--r);
     background: var(--ha-card-background, var(--card-background-color, #1c1c1c));
   }
   :host(.wide.at-left) .panel { border-top-left-radius: 0; }
@@ -454,30 +462,30 @@ const CSS = (c) => `
   /* each over a solid backing that hides the straight edges beneath it, so they end where the
      curve takes over instead of showing through it */
   :host(.wide) .panel::before, :host(.wide) .panel::after {
-    content: ""; position: absolute; top: -16px; width: 16px; height: 16px; z-index: 2; pointer-events: none;
+    content: ""; position: absolute; top: calc(-1px - var(--r)); width: calc(var(--r) + 1px); height: calc(var(--r) + 1px); z-index: 2; pointer-events: none;
     --fill: var(--ha-card-background, var(--card-background-color, #1c1c1c));
   }
   :host(.wide) .panel::before {
-    left: calc(var(--tile-x) * (100% + 2px + var(--wide-gap)) - 16px); /* over the tile's border */
-    background: radial-gradient(circle at 0 0, transparent 15px, var(--wedge) 15px, var(--wedge) 16px, transparent 16px),
-      radial-gradient(circle at 0 0, transparent 15px, var(--fill) 15px);
+    left: calc(var(--tile-x) * (100% + 2px + var(--wide-gap)) - var(--r)); /* over the tile's border */
+    background: radial-gradient(circle at 0 0, transparent var(--r), var(--wedge) var(--r), var(--wedge) calc(var(--r) + 1px), transparent calc(var(--r) + 1px)),
+      radial-gradient(circle at 0 0, transparent var(--r), var(--fill) var(--r));
   }
   :host(.wide) .panel::after {
     left: calc((var(--tile-x) + var(--tile-w)) * (100% + 2px + var(--wide-gap)) - var(--wide-gap) - 2px);
-    background: radial-gradient(circle at 100% 0, transparent 15px, var(--wedge) 15px, var(--wedge) 16px, transparent 16px),
-      radial-gradient(circle at 100% 0, transparent 15px, var(--fill) 15px);
+    background: radial-gradient(circle at 100% 0, transparent var(--r), var(--wedge) var(--r), var(--wedge) calc(var(--r) + 1px), transparent calc(var(--r) + 1px)),
+      radial-gradient(circle at 100% 0, transparent var(--r), var(--fill) var(--r));
   }
   :host(.wide.at-left) .panel::before, :host(.wide.at-right) .panel::after { display: none; }
   /* the tile's own outline is kept at its own height: dashed along the foot it has while closed
      (the part with no line of its own, across the tab) */
-  :host(.wide) .tile .face { border-radius: 14px 14px 0 0; overflow: hidden; }
+  :host(.wide) .tile .face { border-radius: var(--ri) var(--ri) 0 0; overflow: hidden; }
   /* down under the dashed foot (it's drawn over the colour), so no gap shows between them */
-  /* (its corners curve round the same centre as the dashed foot's: 14px across, 15px down) */
-  :host(.wide.tab) .tile .face { bottom: auto; height: 61px; border-radius: 14px 14px 14px 14px / 14px 14px 15px 15px; }
+  /* (its corners curve round the same centre as the dashed foot's: 1px less across than down) */
+  :host(.wide.tab) .tile .face { bottom: auto; height: 61px; border-radius: var(--ri) var(--ri) var(--ri) var(--ri) / var(--ri) var(--ri) var(--r) var(--r); }
   /* on the tile's side borders (1px out from its padding box): the ends meet them */
   :host(.wide.tab) .tile::after {
-    content: ""; position: absolute; left: -1px; right: -1px; top: 45px; height: 16px; box-sizing: border-box; pointer-events: none;
-    border: 1px dashed var(--wedge); border-top: none; border-radius: 0 0 15px 15px;
+    content: ""; position: absolute; left: -1px; right: -1px; top: calc(60px - var(--r)); height: calc(var(--r) + 1px); box-sizing: border-box; pointer-events: none;
+    border: 1px dashed var(--wedge); border-top: none; border-radius: 0 0 var(--r) var(--r);
     clip-path: inset(0 1px); /* not over the solid side borders: it starts where it leaves them */
   }
   :host(.wide) ha-card.on .tile, :host(.wide) ha-card.on .panel { border-color: var(--soft); }
@@ -519,7 +527,7 @@ const CSS = (c) => `
   .ddb .val { min-width: 0; overflow: hidden; text-overflow: ellipsis; font-size: 12px; }
   .ddb ha-icon { flex: none; transition: transform 0.2s; }
   .ddb[aria-expanded="true"] ha-icon { transform: rotate(180deg); }
-  .ddl { margin-top: 8px; max-height: 232px; overflow-y: auto; border: 1px solid var(--line); border-radius: 12px; background: var(--well); }
+  .ddl { margin-top: 8px; max-height: 232px; overflow-y: auto; border: 1px solid var(--line); border-radius: min(var(--rc), 12px); background: var(--well); }
   .ddo {
     display: flex; align-items: center; justify-content: space-between; gap: 8px; width: 100%; min-height: 38px; padding: 0 12px; box-sizing: border-box;
     border: none; background: none; color: var(--primary-text-color); font: inherit; font-size: 13px; text-align: left; cursor: pointer;
@@ -539,7 +547,7 @@ const CSS = (c) => `
   .xrow .chev { transition: transform 0.2s; }
   .xrow[aria-expanded="true"] .chev { transform: rotate(180deg); color: var(--prime); }
   /* More controls sits on a lighter panel of its own */
-  .mset { margin: 10px 0 0; padding: 12px; border-radius: 12px; background: var(--panel); }
+  .mset { margin: 10px 0 0; padding: 12px; border-radius: min(var(--rc), 12px); background: var(--panel); }
   .grp + .grp { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--line); }
   /* a section: row 1 icon + title | state + On / Off; then its sentence (and any note) across,
      stopping where the button starts. Narrow cards: one column */
@@ -602,7 +610,7 @@ const CSS = (c) => `
   .part.dtp + .part.dtp { border-top: none; padding-top: 0; margin-top: 8px; }
   .dt {
     position: relative; overflow: hidden; display: flex; align-items: center; gap: 10px; height: 52px; box-sizing: border-box;
-    padding: 0 12px 0 8px; border-radius: 15px; cursor: ew-resize; outline: none; touch-action: pan-y; user-select: none; -webkit-user-select: none;
+    padding: 0 12px 0 8px; border-radius: var(--rc); cursor: ew-resize; outline: none; touch-action: pan-y; user-select: none; -webkit-user-select: none;
     border: 1px solid var(--edge); background: var(--ha-card-background, var(--card-background-color, #1c1c1c));
   }
   .dt:focus-visible { border-color: var(--prime); }
@@ -664,7 +672,7 @@ class SmartLightCard extends HTMLElement {
     this._drawnWithHass = Boolean(this._hass);
     this._config = withFound(this._raw, this._hass);
     this._foundKey = foundKey(this._hass, this._raw.entity);
-    this.shadowRoot.innerHTML = `<style>${CSS(colorsOf(this._config))}</style><ha-card>${this._html()}</ha-card>`;
+    this.shadowRoot.innerHTML = `<style>${CSS(colorsOf(this._config), radiusOf(this._config))}</style><ha-card>${this._html()}</ha-card>`;
     this._bind();
     this._setOpen(this._open);
     if (this._ctlOpen) this._showCtl(true);
@@ -1666,6 +1674,7 @@ const LABELS = {
   name: "Title",
   icon: "Icon",
   primary: "Primary colour",
+  radius: "Corner radius",
   collapse_others: "Close other light cards when this one opens",
   use_primary: "Use the primary colour (instead of the light's colours)",
   secondary: "Shows",
@@ -1831,6 +1840,7 @@ class SmartLightCardEditor extends HTMLElement {
         ],
       },
       { name: "primary", selector: { color_rgb: {} } },
+      { name: "radius", selector: { number: { min: 0, max: 30, step: 1, mode: "slider", unit_of_measurement: "px" } } },
       { name: "collapse_others", selector: { boolean: {} } },
     ];
     const secondary = [
@@ -1858,7 +1868,7 @@ class SmartLightCardEditor extends HTMLElement {
       })
     );
     // the colour shown is the primary, or the main shade of the named colour
-    const data = { secondary: ["state", "brightness", "countdown"], ...c, primary: colorsOf(c).main, collapse_others: c.collapse_others !== false };
+    const data = { secondary: ["state", "brightness", "countdown"], ...c, primary: colorsOf(c).main, radius: radiusOf(c), collapse_others: c.collapse_others !== false };
     root.querySelector('[data-s="main"]').appendChild(
       this._form(main, data, (v) => {
         const next = { ...this._config, ...v };
@@ -1870,6 +1880,8 @@ class SmartLightCardEditor extends HTMLElement {
         // on is the default: only false is saved
         if (v.collapse_others) delete next.collapse_others;
         else next.collapse_others = false;
+        // 15px is the default: only another radius is saved
+        if (radiusOf(next) === RADIUS) delete next.radius;
         Object.keys(next).forEach((k) => (next[k] === "" || next[k] === undefined) && delete next[k]);
         this._changed(next);
       })
