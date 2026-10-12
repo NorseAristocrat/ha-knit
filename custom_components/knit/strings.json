@@ -72,7 +72,8 @@
           "illuminance": "One or more. With several, their average is used, so a room without a sensor can follow the rooms around it.",
           "pause": "Knit leaves it alone while they're on: nothing turns it on or off by itself, and its card says Automations paused.",
           "start_on": "Leave this off if an automation already controls it, so the two don't both act on it.",
-          "pause_match": "With several pause entities: any one of them on, or only once all of them are."
+          "pause_match": "With several pause entities: any one of them on, or only once all of them are.",
+          "light": "What this smart device runs. Change it to move the device to another light: its settings, entities and cards stay."
         }
       },
       "auto_off_switch": {
@@ -91,9 +92,13 @@
           "off_after_outage": "For a device that shouldn't come back on by itself.",
           "pause": "Knit leaves it alone while they're on: nothing turns it on or off by itself, and its card says Automations paused.",
           "start_on": "Leave this off if an automation already controls it, so the two don't both act on it.",
-          "pause_match": "With several pause entities: any one of them on, or only once all of them are."
+          "pause_match": "With several pause entities: any one of them on, or only once all of them are.",
+          "light": "What this smart device runs. Change it to move the device to another one: its settings, entities and cards stay."
         }
       }
+    },
+    "error": {
+      "already_configured": "Another Knit device already runs that one."
     }
   },
   "entity": {

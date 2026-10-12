@@ -39,6 +39,23 @@ def features(entry: ConfigEntry) -> tuple[bool, bool]:
     return bool(conf.get("presence")), level
 
 
+def expected_roles(hass, entry: ConfigEntry) -> set[str] | None:
+    """The role of every entity this device has now (what the platforms add), or None for a kind
+    of device this doesn't know. Used to remove the ones it no longer has."""
+    if kind(entry) not in (TYPE_LIGHT, TYPE_SWITCH):
+        return None
+    conf = {**entry.data, **entry.options}
+    motion, level = features(entry)
+    roles = {"light"}
+    if motion:
+        roles |= {"motion", "auto_off_time", "occupied", "auto_off_ends"}
+        if dimmable(hass, conf.get("light") or ""):
+            roles.add("dim_time")
+    if level:
+        roles |= {"light_level", "off_after", "dark_below", "light_above", "dark", "illuminance", "off_when_light_ends"}
+    return roles
+
+
 def dimmable(hass, light: str) -> bool:
     """Whether the light can be dimmed: a light with a colour mode other than on / off.
 

@@ -14,6 +14,7 @@ from homeassistant.loader import async_get_integration
 
 from .const import CARD_FILE, CARD_URL, DOMAIN
 from .controller import LightController
+from .entity import expected_roles
 
 _LOGGER = logging.getLogger(__name__)
 # set up in the UI only (Settings → Devices & services), nothing in configuration.yaml
@@ -64,10 +65,26 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     hass.data.setdefault(DOMAIN, {})[entry.entry_id] = controller
     # the entities restore their settings into the controller as they're added
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
+    _remove_stale_entities(hass, entry)
     controller.start()
     entry.async_on_unload(controller.stop)
     entry.async_on_unload(entry.add_update_listener(_reload))
     return True
+
+
+def _remove_stale_entities(hass: HomeAssistant, entry: ConfigEntry) -> None:
+    """Entities this device no longer has (its sensors changed, or its base entity: no Dim before
+    off once it runs a switch): removed, rather than left unavailable."""
+    from homeassistant.helpers import entity_registry as er
+
+    roles = expected_roles(hass, entry)
+    if roles is None:
+        return
+    registry = er.async_get(hass)
+    prefix = f"{entry.entry_id}_"
+    for ent in er.async_entries_for_config_entry(registry, entry.entry_id):
+        if ent.unique_id.startswith(prefix) and ent.unique_id[len(prefix):] not in roles:
+            registry.async_remove(ent.entity_id)
 
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:

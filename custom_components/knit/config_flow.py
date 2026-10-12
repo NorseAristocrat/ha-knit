@@ -38,7 +38,13 @@ def _ent(**kw):
     return selector.EntitySelector(selector.EntitySelectorConfig(**kw))
 
 
-# the fields each kind of device can change later (options)
+# what each kind of device can be built around (its base entity)
+BASE_DOMAINS = {
+    TYPE_LIGHT: ["light", "switch"],
+    TYPE_SWITCH: ["switch", "light", "fan", "input_boolean"],
+}
+
+# the fields each kind of device can change later (options), besides its base entity
 OPTION_FIELDS = {
     TYPE_LIGHT: (CONF_PRESENCE, CONF_ILLUMINANCE, CONF_PAUSE, CONF_PAUSE_MATCH),
     TYPE_SWITCH: (CONF_PRESENCE, CONF_PAUSE, CONF_PAUSE_MATCH, CONF_OFF_AFTER_OUTAGE),
@@ -76,7 +82,7 @@ class KnitConfigFlow(ConfigFlow, domain=DOMAIN):
         if user_input is not None:
             return await self._create(TYPE_LIGHT, user_input[CONF_LIGHT], user_input)
         schema = {
-            vol.Required(CONF_LIGHT): _ent(domain=["light", "switch"]),
+            vol.Required(CONF_LIGHT): _ent(domain=BASE_DOMAINS[TYPE_LIGHT]),
             vol.Optional(CONF_NAME): selector.TextSelector(),
             **_schema(TYPE_LIGHT, {}),
             vol.Optional(CONF_START_ON, default=True): selector.BooleanSelector(),
@@ -87,7 +93,7 @@ class KnitConfigFlow(ConfigFlow, domain=DOMAIN):
         if user_input is not None:
             return await self._create(TYPE_SWITCH, user_input[CONF_LIGHT], user_input)
         schema = {
-            vol.Required(CONF_LIGHT): _ent(domain=["switch", "light", "fan", "input_boolean"]),
+            vol.Required(CONF_LIGHT): _ent(domain=BASE_DOMAINS[TYPE_SWITCH]),
             vol.Optional(CONF_NAME): selector.TextSelector(),
             **_schema(TYPE_SWITCH, {}),
             vol.Optional(CONF_START_ON, default=True): selector.BooleanSelector(),
@@ -102,12 +108,34 @@ class KnitConfigFlow(ConfigFlow, domain=DOMAIN):
 
 class KnitOptionsFlow(OptionsFlow):
     async def async_step_init(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
-        kind = self.config_entry.data.get(CONF_TYPE, TYPE_LIGHT)
+        entry = self.config_entry
+        kind = entry.data.get(CONF_TYPE, TYPE_LIGHT)
+        current = {**entry.data, **entry.options}
+        errors: dict = {}
         if user_input is not None:
-            # a field cleared in the form is left out of user_input: save it as cleared
-            return self.async_create_entry(data={k: user_input.get(k) for k in OPTION_FIELDS[kind]})
-        current = {**self.config_entry.data, **self.config_entry.options}
-        return self.async_show_form(step_id=kind, data_schema=vol.Schema(_schema(kind, current)))
+            # the base entity changed: the device moves to it, keeping its entities, settings and cards
+            base = user_input.get(CONF_LIGHT) or current[CONF_LIGHT]
+            if base != current[CONF_LIGHT]:
+                unique_id = f"{kind}:{base}"
+                taken = any(
+                    e.unique_id == unique_id and e.entry_id != entry.entry_id
+                    for e in self.hass.config_entries.async_entries(DOMAIN)
+                )
+                if taken:
+                    errors[CONF_LIGHT] = "already_configured"
+                else:
+                    self.hass.config_entries.async_update_entry(
+                        entry, data={**entry.data, CONF_LIGHT: base}, unique_id=unique_id
+                    )
+            if not errors:
+                # a field cleared in the form is left out of user_input: save it as cleared
+                return self.async_create_entry(data={k: user_input.get(k) for k in OPTION_FIELDS[kind]})
+            current = {**current, **user_input}
+        schema = {
+            vol.Required(CONF_LIGHT, default=current[CONF_LIGHT]): _ent(domain=BASE_DOMAINS[kind]),
+            **_schema(kind, current),
+        }
+        return self.async_show_form(step_id=kind, data_schema=vol.Schema(schema), errors=errors)
 
     # the form is shown under the device kind's own step, for its own labels
     async def async_step_light(self, user_input=None):
@@ -115,7 +143,6 @@ class KnitOptionsFlow(OptionsFlow):
 
     async def async_step_auto_off_switch(self, user_input=None):
         return await self.async_step_init(user_input)
-
 
 
 __all__ = ["KnitConfigFlow"]
