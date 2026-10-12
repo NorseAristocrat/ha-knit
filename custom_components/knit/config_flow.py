@@ -15,7 +15,6 @@ from .const import (
     CONF_OFF_AFTER_OUTAGE,
     CONF_PAUSE,
     CONF_PAUSE_MATCH,
-    CONF_PEOPLE,
     CONF_PRESENCE,
     CONF_START_ON,
     CONF_TYPE,
@@ -41,7 +40,7 @@ def _ent(**kw):
 
 # the fields each kind of device can change later (options)
 OPTION_FIELDS = {
-    TYPE_LIGHT: (CONF_PRESENCE, CONF_ILLUMINANCE, CONF_PAUSE, CONF_PAUSE_MATCH, CONF_PEOPLE),
+    TYPE_LIGHT: (CONF_PRESENCE, CONF_ILLUMINANCE, CONF_PAUSE, CONF_PAUSE_MATCH),
     TYPE_SWITCH: (CONF_PRESENCE, CONF_PAUSE, CONF_PAUSE_MATCH, CONF_OFF_AFTER_OUTAGE),
 }
 
@@ -55,9 +54,6 @@ def _schema(kind: str, d: dict) -> dict:
     fields[vol.Optional(CONF_PAUSE_MATCH, default=d.get(CONF_PAUSE_MATCH) or "any")] = selector.SelectSelector(
         selector.SelectSelectorConfig(options=["any", "all"], translation_key=CONF_PAUSE_MATCH, mode=selector.SelectSelectorMode.LIST)
     )
-    # a motion-controlled device is never turned on, so nobody being home changes nothing for it
-    if kind == TYPE_LIGHT:
-        fields[_opt(d, CONF_PEOPLE)] = _ent(domain=["person", "device_tracker"], multiple=True)
     if kind == TYPE_SWITCH:
         fields[vol.Optional(CONF_OFF_AFTER_OUTAGE, default=bool(d.get(CONF_OFF_AFTER_OUTAGE, True)))] = selector.BooleanSelector()
     return fields
