@@ -1,8 +1,5 @@
 <p align="center">
-  <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="images/dark_icon.png">
-    <img src="images/icon.png" alt="Knit" width="128">
-  </picture>
+  <img src="images/icon.png" alt="Knit" width="128">
 </p>
 
 # Knit
@@ -117,6 +114,17 @@ away; tap again and they're back. A subtitle (or an entity's state) sits beside 
 optional button on the right acts on anything you like ("All off").
 
 ![Folding a section](images/demo/section-fold.gif)
+
+**Making a group collapsible** takes one card. Edit the dashboard, press **+** in the section,
+choose **By card**, search for **Knit Section**, give it a title and save. A new card lands at the
+bottom of its section, so drag the header to the top: every card below it, down to the next
+section card or the end of the section, now folds under it. Leave edit mode and tap the title.
+(While you're editing, nothing is folded, so you can always reach your cards.)
+
+![Adding a section card to a group of cards](images/demo/section-add.gif)
+
+A section can hold more than one header: put a second section card further down and the cards
+under each fold separately.
 
 ### Expand on a trigger
 
