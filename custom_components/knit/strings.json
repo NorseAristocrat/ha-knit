@@ -20,16 +20,14 @@
           "illuminance": "Light level sensors (lx)",
           "pause": "Pause while these are on (e.g. guests)",
           "start_on": "Turn its automatic features on now",
-          "pause_match": "Pause when",
-          "people": "Nobody home: people to follow"
+          "pause_match": "Pause when"
         },
         "data_description": {
           "presence": "Motion uses these. Leave empty for no motion control.",
           "illuminance": "One or more. With several, their average is used, so a room without a sensor can follow the rooms around it.",
           "pause": "Knit leaves it alone while they're on: nothing turns it on or off by itself, and its card says Automations paused.",
           "start_on": "Leave this off if an automation already controls it, so the two don't both act on it.",
-          "pause_match": "With several pause entities: any one of them on, or only once all of them are.",
-          "people": "While all of them are away, nothing turns the light on (presence, the dark), but it still goes off as usual. Someone coming home to an occupied, dark room turns it on."
+          "pause_match": "With several pause entities: any one of them on, or only once all of them are."
         }
       },
       "auto_off_switch": {
@@ -90,8 +88,7 @@
           "illuminance": "Light level sensors (lx)",
           "pause": "Pause while these are on (e.g. guests)",
           "start_on": "Turn its automatic features on now",
-          "pause_match": "Pause when",
-          "people": "Nobody home: people to follow"
+          "pause_match": "Pause when"
         },
         "data_description": {
           "presence": "Motion uses these. Leave empty for no motion control.",
@@ -99,7 +96,7 @@
           "pause": "Knit leaves it alone while they're on: nothing turns it on or off by itself, and its card says Automations paused.",
           "start_on": "Leave this off if an automation already controls it, so the two don't both act on it.",
           "pause_match": "With several pause entities: any one of them on, or only once all of them are.",
-          "people": "While all of them are away, nothing turns the light on (presence, the dark), but it still goes off as usual. Someone coming home to an occupied, dark room turns it on."
+          "light": "What this smart device runs. Change it to move the device to another light: its settings, entities and cards stay."
         }
       },
       "auto_off_switch": {
@@ -118,7 +115,8 @@
           "off_after_outage": "For a device that shouldn't come back on by itself.",
           "pause": "Knit leaves it alone while they're on: nothing turns it on or off by itself, and its card says Automations paused.",
           "start_on": "Leave this off if an automation already controls it, so the two don't both act on it.",
-          "pause_match": "With several pause entities: any one of them on, or only once all of them are."
+          "pause_match": "With several pause entities: any one of them on, or only once all of them are.",
+          "light": "What this smart device runs. Change it to move the device to another one: its settings, entities and cards stay."
         }
       },
       "appliance": {
@@ -132,7 +130,7 @@
           "full_name": "Name for Full"
         },
         "data_description": {
-          "power": "Its smart plug's power. Running once it's been above Running above for a while; finished once it's been below it for a while.",
+          "power": "Its smart plug's power. Change it to move this appliance to another plug: its settings, entities and cards stay.",
           "door": "On = open. Open for a while once it's not drawing power: emptied.",
           "empty_name": "Its status once emptied (and before the first cycle).",
           "running_name": "Its status while a cycle runs.",
@@ -141,6 +139,7 @@
       }
     },
     "error": {
+      "already_configured": "Another Knit device already runs that one.",
       "same_names": "Give each status a different name."
     }
   },

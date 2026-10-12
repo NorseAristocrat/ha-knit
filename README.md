@@ -23,9 +23,7 @@ Set a device up once: no helpers, automations or scripts.
   averaged, so a room with no sensor of its own can follow the rooms around it.
 - **Pause**: optionally, nothing happens while the entities you pick are on (guest mode, for
   example): any one of them, or only once all of them are. The card says Automations paused.
-- **Nobody home**: optionally, people (or device trackers) to follow. While all of them are away,
-  nothing turns the light on (a pet or a robot vacuum won't), but it still goes off as usual;
-  someone coming home to an occupied, dark room turns it on.
+  A helper that's on while nobody's home works well here.
 
 **Motion-controlled device**: a device that should go off once nobody's around: off once the
 room has been empty for its Motion timeout; presence never turns it on. Optionally it's switched
@@ -44,6 +42,9 @@ off again if it comes back on after a power cut.
 - The three statuses can be renamed per appliance (Configure: e.g. Clean / Washing / Ready). The
   select's options are the new names; its `status` attribute is always Empty, Running or Full,
   so an automation can follow that instead of the names.
+
+A device's sensors can be changed later (Configure on the device), and so can what it runs: pick
+another light and the device moves to it, keeping its settings, entities and cards.
 
 A device only gets the entities for the sensors it's given. Every entity id starts `knit_` and the
 device's name, e.g. `switch.knit_living_room_lamp_motion`. Settings are under Configuration on the

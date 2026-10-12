@@ -14,7 +14,6 @@ CONF_PRESENCE = "presence"  # one or more binary sensors: occupied while any is 
 CONF_ILLUMINANCE = "illuminance"  # one or more light level sensors (lx): their average is judged
 CONF_PAUSE = "pause"  # while these entities are on (any / all of them), nothing happens (e.g. guests)
 CONF_PAUSE_MATCH = "pause_match"  # "any" (default) or "all" of the pause entities
-CONF_PEOPLE = "people"  # people / trackers: while all of them are away, nothing turns the light on
 CONF_START_ON = "start_on"  # turn the automatic features on when it's set up
 CONF_OFF_AFTER_OUTAGE = "off_after_outage"  # motion-controlled device: off again if it comes back on after a power cut
 CONF_POWER = "power"  # appliance: its plug's power sensor (W)

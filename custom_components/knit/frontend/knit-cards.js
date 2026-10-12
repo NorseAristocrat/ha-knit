@@ -34,7 +34,7 @@
  *   motion:
  *     presence: binary_sensor.x_occupied     # shown in Motion control
  *     enabled: input_boolean.x_motion        # optional: no button on the card; greys Motion control while off
- *   auto_off:
+ *   motion_control:                          # (auto_off: in older configs is read the same)
  *     enabled: input_boolean.x_auto_off
  *     duration: input_number.x_auto_off_duration
  *     timer: timer.x_auto_off
@@ -51,7 +51,7 @@
  *     off_after: input_number.x_off_when_light_after
  *     timer: timer.x_off_when_light
  *     hint: ...
- * Leave out auto_off / light_level to drop that group. `hidden: true` in a group only
+ * Leave out motion_control / light_level to drop that group. `hidden: true` in a group only
  * stops the card showing it: its helpers keep their values, the automations keep acting on
  * them, and its countdown still shows on the tile.
  *
@@ -60,7 +60,7 @@
  * them all. `wide: false` keeps it at its own width.
  */
 
-const SLC_VERSION = "36";
+const SLC_VERSION = "37";
 const PENDING_MS = 8000;
 const RING = 2 * Math.PI * 19;
 // which cards are open (and their More controls), so a redraw (as the editor does) keeps it
@@ -93,7 +93,11 @@ const gridCell = (el) => {
 // it: the tile stays where it is, beside the cards on its row (they stay too, at their own
 // height), and the panel reaches under them. `wide: false` keeps it at its own width.
 let widened; // the open card spread across its row
-const widen = (card, open) => {
+// An open card always has the same look (class `wide`): its tile keeps its own outline, dashed
+// along its foot, and the panel hangs beneath it. A part-width card in a sections view also
+// spreads the panel across the whole row (`spread`), unless `wide: false`, or its panel holds
+// only More controls and that's closed.
+const widen = (card, open, spread = true) => {
   const was = card._wide;
   if (was) {
     was.mates.forEach(([el, before]) => (before ? (el.style.alignSelf = before) : el.style.removeProperty("align-self")));
@@ -101,46 +105,61 @@ const widen = (card, open) => {
     card._wide = undefined;
     if (widened === card) widened = undefined;
   }
-  if (!open || card._config?.wide === false) return;
-  // only More controls in the panel, and it's closed: the card keeps its own width
+  if (!open) return;
+  // at its own width: the tile fills it, the panel sits right under it
+  let look = { x: 0, w: 1, gap: 0, tab: 8, mates: [] };
+  const row = spread && card._config?.wide !== false && rowOf(card);
+  if (row) {
+    // one card has the row at a time: another still open goes back to its own width
+    if (widened && widened !== card) widen(widened, true, false);
+    look = row;
+    widened = card;
+  }
+  card.style.setProperty("--tab-x", `${look.tab}px`);
+  card.style.setProperty("--wide-gap", `${look.gap}px`);
+  card.style.setProperty("--tile-x", String(look.x));
+  card.style.setProperty("--tile-w", String(look.w));
+  card.classList.add("wide", "tab");
+  card.classList.toggle("at-left", look.x < 0.01);
+  card.classList.toggle("at-right", look.x + look.w > 0.99);
+  card._wide = { mates: look.mates };
+};
+// where an open card spreads across its row: its place in the row, the row's gap, how far its
+// tile reaches down to the panel, and the cards beside it. Undefined when it keeps its own width
+// (not in a sections view, already the whole row, only More controls and that's closed).
+// Measured before the open look is applied.
+const rowOf = (card) => {
   const parts = card.shadowRoot?.querySelectorAll(".panel > .part") || [];
-  if (parts.length === 1 && parts[0].querySelector("[data-ctl]") && !card._ctlOpen) return;
+  if (parts.length === 1 && parts[0].querySelector("[data-ctl]") && !card._ctlOpen) return undefined;
   const at = gridCell(card);
-  if (!at?.cell) return;
+  if (!at?.cell) return undefined;
   const { cell, grid } = at;
   const gs = getComputedStyle(grid);
-  if (gs.display !== "grid") return;
+  if (gs.display !== "grid") return undefined;
   const gap = parseFloat(gs.columnGap) || 0;
   const g = grid.getBoundingClientRect();
   const left = g.left + (parseFloat(gs.paddingLeft) || 0);
   const width = g.width - (parseFloat(gs.paddingLeft) || 0) - (parseFloat(gs.paddingRight) || 0);
   const c = cell.getBoundingClientRect();
-  if (!width || c.width > width * 0.9) return; // already (nearly) the whole row
-  if (widened && widened !== card) widen(widened, false);
+  if (!width || c.width > width * 0.9) return undefined; // already (nearly) the whole row
   // the cards beside it, at their own height (not stretched to the open card's)
-  const mates = [...grid.children].filter(
+  const beside = [...grid.children].filter(
     (el) => el !== cell && el.offsetParent && Math.abs(el.getBoundingClientRect().top - c.top) < 2
   );
-  const before = mates.map((el) => [el, el.style.alignSelf]);
-  mates.forEach((el) => (el.style.alignSelf = "start")); // before measuring them
-  const tall = Math.max(0, ...mates.map((el) => el.getBoundingClientRect().height));
-  const tile = card.shadowRoot?.querySelector(".tile");
+  const mates = beside.map((el) => [el, el.style.alignSelf]);
+  beside.forEach((el) => (el.style.alignSelf = "start")); // before measuring them
+  const tall = Math.max(0, ...beside.map((el) => el.getBoundingClientRect().height));
   // the panel's top edge sits 1px above the tile's foot (they overlap): it starts the same gap
   // below the tallest card beside it as there is between the cards
-  const foot = (tile?.offsetHeight || 60) - 1;
-  card.style.setProperty("--tab-x", `${mates.length ? Math.max(0, tall + gap - foot) : 0}px`);
-  card.style.setProperty("--wide-gap", `${gap}px`);
-  // where the tile sits, as shares of the row (so it follows the row's width)
-  const x = clamp((c.left - left) / (width + gap), 0, 1);
-  const w = (c.width + gap) / (width + gap);
-  card.style.setProperty("--tile-x", String(x));
-  card.style.setProperty("--tile-w", String(w));
-  card.classList.add("wide");
-  card.classList.toggle("tab", mates.length > 0);
-  card.classList.toggle("at-left", x < 0.01);
-  card.classList.toggle("at-right", x + w > 0.99);
-  card._wide = { mates: before };
-  widened = card;
+  const foot = (card.shadowRoot?.querySelector(".tile")?.offsetHeight || 60) - 1;
+  return {
+    // its place, as shares of the row (so it follows the row's width)
+    x: clamp((c.left - left) / (width + gap), 0, 1),
+    w: (c.width + gap) / (width + gap),
+    gap,
+    tab: beside.length ? Math.max(8, tall + gap - foot) : 8,
+    mates,
+  };
 };
 // the row's width changed (a rotated phone, a resized window): measured again
 const rewiden = (card) => {
@@ -257,6 +276,12 @@ const deviceOfLight = (hass, light) => {
   }
   return undefined;
 };
+// `auto_off` is the Motion control group's old key: read as `motion_control`
+const renamed = (config) => {
+  if (!config || config.auto_off === undefined) return config;
+  const { auto_off, ...rest } = config;
+  return { motion_control: auto_off, ...rest };
+};
 const withFound = (raw, hass) => {
   const f = found(hass, raw.entity);
   if (!Object.keys(f).length) return raw;
@@ -273,7 +298,7 @@ const withFound = (raw, hass) => {
     ref: f.light, // the device's light sensor: says whether it's paused
     // Motion is the Motion control switch (it covers the timeout; older versions had a separate one)
     motion: fill("motion", { presence: f.occupied }),
-    auto_off: fill("auto_off", {
+    motion_control: fill("motion_control", {
       enabled: f.motion || f.auto_off,
       duration: f.auto_off_time,
       dim: f.dim_time,
@@ -294,9 +319,9 @@ const withFound = (raw, hass) => {
   };
   // only the features the integration made for this light (no presence: no Motion control, ...)
   if (c.motion && !c.motion.presence) delete c.motion;
-  if (c.auto_off && !c.auto_off.enabled && !c.auto_off.duration) delete c.auto_off;
+  if (c.motion_control && !c.motion_control.enabled && !c.motion_control.duration) delete c.motion_control;
   if (c.light_level && !c.light_level.enabled && !c.light_level.dark && !c.light_level.dark_below) delete c.light_level;
-  ["motion", "auto_off", "light_level"].forEach((k) => c[k] === undefined && delete c[k]);
+  ["motion", "motion_control", "light_level"].forEach((k) => c[k] === undefined && delete c[k]);
   return c;
 };
 
@@ -400,15 +425,10 @@ const CSS = (c) => `
   ha-card.open .tile .exp { transform: rotate(180deg); color: var(--prime); }
 
   .panel { border-top: 1px solid var(--line); padding: 10px 12px 12px; }
-  /* opened at its own width: the tile's foot is a dashed line over its colour (as when it's
-     spread across the row), not a separate edge on the panel, so no gap shows between them */
-  :host(:not(.wide)) ha-card.open .panel { border-top: none; }
-  :host(:not(.wide)) ha-card.open .tile::after {
-    content: ""; position: absolute; left: 0; right: 0; bottom: 0; border-top: 1px dashed var(--wedge); pointer-events: none;
-  }
 
-  /* opened across the whole row (a part-width card in a sections view): the tile keeps its
-     width and place, the panel spans the row beneath it, joined to the tile as one shape */
+  /* opened (the host has .wide): the tile keeps its own outline, dashed along its foot, and the
+     panel hangs beneath it, joined to it as one shape. A part-width card in a sections view
+     spreads the panel across the whole row; otherwise it's the card's own width */
   :host(.wide) ha-card, :host(.wide) ha-card.on { overflow: visible; border: none; background: none; box-shadow: none; }
   :host(.wide) ha-card.on { filter: drop-shadow(0 3px 4px rgba(0, 0, 0, 0.2)); }
   :host(.wide) .tile {
@@ -490,6 +510,24 @@ const CSS = (c) => `
     border: 1px solid var(--soft); border-radius: 15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding: 0 6px;
   }
   .chip.on { background: var(--bg); border-color: var(--bg); color: #fff; }
+  /* a dropdown: the button with the current value, and its list of options beneath when open */
+  .ddb {
+    display: flex; align-items: center; gap: 2px; min-width: 0; max-width: 100%; height: 32px; padding: 0 6px 0 12px; box-sizing: border-box;
+    border: 1px solid var(--soft); border-radius: 15px; background: transparent; color: var(--prime); cursor: pointer;
+    font: inherit; --mdc-icon-size: 18px;
+  }
+  .ddb .val { min-width: 0; overflow: hidden; text-overflow: ellipsis; font-size: 12px; }
+  .ddb ha-icon { flex: none; transition: transform 0.2s; }
+  .ddb[aria-expanded="true"] ha-icon { transform: rotate(180deg); }
+  .ddl { margin-top: 8px; max-height: 232px; overflow-y: auto; border: 1px solid var(--line); border-radius: 12px; background: var(--well); }
+  .ddo {
+    display: flex; align-items: center; justify-content: space-between; gap: 8px; width: 100%; min-height: 38px; padding: 0 12px; box-sizing: border-box;
+    border: none; background: none; color: var(--primary-text-color); font: inherit; font-size: 13px; text-align: left; cursor: pointer;
+  }
+  .ddo + .ddo { border-top: 1px solid var(--line); }
+  .ddo:focus-visible { outline: 2px solid var(--prime); outline-offset: -2px; }
+  .ddo.on { color: var(--prime); font-weight: 600; background: var(--tint); }
+  .ddo.on::after { content: "✓"; }
 
   /* More controls */
   .xrow {
@@ -607,7 +645,7 @@ class SmartLightCard extends HTMLElement {
 
   setConfig(config) {
     if (!config?.entity && !config?.device) throw new Error("Pick a Knit device (device) or a light (entity)");
-    this._raw = { secondary: ["state", "brightness", "countdown"], attributes: [], ...config };
+    this._raw = { secondary: ["state", "brightness", "countdown"], attributes: [], ...renamed(config) };
     this._config = withFound(this._raw, this._hass);
     this._pending = {};
     const mem = OPEN.get(config.device || config.entity);
@@ -635,11 +673,21 @@ class SmartLightCard extends HTMLElement {
   set hass(hass) {
     this._hass = hass;
     if (!this._config) return;
-    // only a Knit device given: the light it runs
-    if (!this._raw.entity && this._raw.device) {
-      this._raw.entity = lightOfDevice(hass, this._raw.device);
+    // a Knit device given: the light it runs now. It wins over `entity`, so the card follows a
+    // device that's been moved to another light (looked up again only when the registry changes)
+    if (this._raw.device) {
+      if (hass.entities !== this._ents || !this._refId) {
+        this._ents = hass.entities;
+        this._refId = Object.values(hass.entities || {}).find(
+          (e) => e.device_id === this._raw.device && hass.states[e.entity_id]?.attributes.knit
+        )?.entity_id;
+      }
+      const light = this._refId && hass.states[this._refId]?.attributes.knit;
+      if (light && light !== this._raw.entity) {
+        this._raw.entity = light;
+        this._drawnWithHass = false;
+      }
       if (!this._raw.entity) return;
-      this._drawnWithHass = false;
     }
     // drawn again once hass arrives, and when the integration's entities for this light change
     if (!this._drawnWithHass || foundKey(hass, this._raw.entity) !== this._foundKey) this._dom();
@@ -752,7 +800,7 @@ class SmartLightCard extends HTMLElement {
 
   // a dim before off, for a light that can be dimmed
   _hasDim() {
-    return Boolean(this._config.auto_off?.dim) && this._dimmable();
+    return Boolean(this._config.motion_control?.dim) && this._dimmable();
   }
 
   _brightness() {
@@ -765,7 +813,7 @@ class SmartLightCard extends HTMLElement {
 
   _timeId(key) {
     const c = this._config;
-    return { auto: c.auto_off?.duration, dim: c.auto_off?.dim, after: c.light_level?.off_after }[key];
+    return { auto: c.motion_control?.duration, dim: c.motion_control?.dim, after: c.light_level?.off_after }[key];
   }
 
   _unit(id) {
@@ -845,8 +893,8 @@ class SmartLightCard extends HTMLElement {
     const c = this._config;
     const parts = (c.attributes || []).map((a, j) => this._attrHtml(a, j)).filter(Boolean);
     // hidden groups aren't drawn (their countdowns still show on the tile)
-    const shown = (g) => (c[g] && !c[g].hidden ? this[`_${{ motion: "motion", auto_off: "auto", light_level: "level" }[g]}Html`]() : "");
-    const groups = [shown("auto_off"), shown("light_level")].filter(Boolean);
+    const shown = (g) => (c[g] && !c[g].hidden ? this[`_${{ motion: "motion", motion_control: "auto", light_level: "level" }[g]}Html`]() : "");
+    const groups = [shown("motion_control"), shown("light_level")].filter(Boolean);
     if (groups.length) {
       parts.push(`<button class="xrow" data-ctl aria-expanded="false"><ha-icon icon="mdi:tune-variant"></ha-icon><span class="lb">More controls</span><ha-icon class="chev" icon="mdi:chevron-down"></ha-icon></button>
         <div class="mset" hidden>${groups.join("")}</div>`);
@@ -861,9 +909,12 @@ class SmartLightCard extends HTMLElement {
       `<div class="row"><div class="title"><ha-icon icon="${esc(icon)}"></ha-icon><span>${esc(name)}</span></div><div class="end">${end}</div></div>`;
     const name = (dflt) => (typeof a === "object" && a.name) || dflt;
     const icon = (dflt) => (typeof a === "object" && a.icon) || dflt;
+    // a list to pick from: a button with the current value, its options listed beneath when open
+    const dd = (label, val) =>
+      `<button class="ddb" data-dd aria-haspopup="listbox" aria-expanded="false" aria-label="${esc(label)}"><span class="val" ${val}></span><ha-icon icon="mdi:chevron-down"></ha-icon></button>`;
     if (ATTRS[key]) {
       const [n, i] = ATTRS[key];
-      if (key === "effect") return `<div data-a="effect">${head(name(n), icon(i), `<span class="val" data-av="effect"></span>`)}<div class="chips" data-fx></div></div>`;
+      if (key === "effect") return `<div data-a="effect">${head(name(n), icon(i), dd(name(n), `data-av="effect"`))}<div class="ddl" data-fx role="listbox" hidden></div></div>`;
       const d = { brightness: "bri", color_temp: "ct", color: "hue" }[key];
       // colour temperature and colour show the light's actual colours, unless use_primary
       const spec = d !== "bri" && !(typeof a === "object" && a.use_primary) ? " spec" : "";
@@ -879,7 +930,10 @@ class SmartLightCard extends HTMLElement {
     if (TOGGLES.includes(domain)) end = `<button class="offb" data-etog="${esc(id)}" role="switch" aria-label="${esc(label)}"></button>`;
     else if (domain === "input_number" || domain === "number")
       end = `<span class="num"><input type="number" data-enum="${esc(id)}" aria-label="${esc(label)}"><span class="u" data-eu="${j}"></span></span>`;
-    else if (domain === "input_select" || domain === "select") below = `<div class="chips" data-esel="${esc(id)}"></div>`;
+    else if (domain === "input_select" || domain === "select") {
+      end = dd(label, `data-ev="${j}"`);
+      below = `<div class="ddl" data-esel="${esc(id)}" role="listbox" hidden></div>`;
+    }
     return `<div data-e="${j}">${head(label, ic, end)}${below}</div>`;
   }
 
@@ -915,7 +969,7 @@ class SmartLightCard extends HTMLElement {
   }
 
   _autoHtml() {
-    const x = this._config.auto_off;
+    const x = this._config.motion_control;
     if (!x) return "";
     // a light that can't be dimmed (a switch, an on / off light) has no dim before off
     const inputs = [x.duration && this._tinHtml("auto", "Off after"), this._hasDim() && this._tinHtml("dim", "Dim before off")].filter(Boolean);
@@ -1106,6 +1160,30 @@ class SmartLightCard extends HTMLElement {
       if (b) this._optimistic("fx", b.dataset.opt, () => this._call("light", "turn_on", { entity_id: c.entity, effect: b.dataset.opt }));
     });
 
+    // dropdowns: the button opens its list (beneath it); picking, or Escape, closes it
+    this.$$("[data-dd]").forEach((btn) => {
+      const list = btn.closest("[data-a], [data-e]")?.querySelector(".ddl");
+      if (!list) return;
+      const show = (open) => {
+        list.hidden = !open;
+        btn.setAttribute("aria-expanded", String(open));
+        if (open) (list.querySelector(".ddo.on") || list.querySelector(".ddo"))?.focus();
+      };
+      btn.addEventListener("click", () => show(list.hidden));
+      list.addEventListener("click", (e) => e.target.closest("[data-opt]") && (show(false), btn.focus()));
+      list.addEventListener("keydown", (e) => {
+        const opts = [...list.querySelectorAll(".ddo")];
+        const i = opts.indexOf(this.shadowRoot.activeElement);
+        if (e.key === "Escape") {
+          show(false);
+          btn.focus();
+        } else if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+          e.preventDefault();
+          opts[clamp(i + (e.key === "ArrowDown" ? 1 : -1), 0, opts.length - 1)]?.focus();
+        }
+      });
+    });
+
     // other entities
     this.$$("[data-etog]").forEach((b) => b.addEventListener("click", () => this._toggleId(b.dataset.etog)));
     this.$$("[data-enum]").forEach((inp) =>
@@ -1126,7 +1204,7 @@ class SmartLightCard extends HTMLElement {
     );
 
     // groups
-    const swId = { motion: c.motion?.enabled, auto: c.auto_off?.enabled, level: c.light_level?.enabled };
+    const swId = { motion: c.motion?.enabled, auto: c.motion_control?.enabled, level: c.light_level?.enabled };
     this.$$("[data-gsw]").forEach((b) => b.addEventListener("click", () => this._toggleId(swId[b.dataset.gsw])));
     // times: mm:ss; 75 seconds typed is 1:15; ↑ / ↓ step the part in focus (seconds roll over
     // into minutes); saved when a part changes
@@ -1259,7 +1337,7 @@ class SmartLightCard extends HTMLElement {
       const left = secsLeft(t);
       if (left !== undefined) out.push({ label, left, total: durationSecs(t.attributes.duration), auto });
     };
-    if (c.auto_off?.timer) add(c.auto_off.timer, "Motion", true);
+    if (c.motion_control?.timer) add(c.motion_control.timer, "Motion", true);
     if (c.light_level?.timer && (!c.light_level.enabled || this._isOnId(c.light_level.enabled))) add(c.light_level.timer, "Light", false);
     // timers: other countdowns; entities: [..] is one countdown that ends when the last does
     (c.timers || []).forEach((x) => {
@@ -1364,11 +1442,14 @@ class SmartLightCard extends HTMLElement {
       const key = list.join("|");
       if (box.dataset.key !== key) {
         box.dataset.key = key;
-        box.innerHTML = list.map((o) => `<button class="chip" data-opt="${esc(o)}">${esc(o)}</button>`).join("");
+        box.innerHTML = list.map((o) => `<button class="ddo" role="option" data-opt="${esc(o)}">${esc(o)}</button>`).join("");
       }
       const cur = this._hold("fx", a.effect, a.effect);
-      box.querySelectorAll("[data-opt]").forEach((b) => b.classList.toggle("on", b.dataset.opt === cur));
-      this.$('[data-av="effect"]').textContent = on && cur && cur !== "off" && cur !== "None" ? cur : "";
+      box.querySelectorAll("[data-opt]").forEach((b) => {
+        b.classList.toggle("on", b.dataset.opt === cur);
+        b.setAttribute("aria-selected", String(b.dataset.opt === cur));
+      });
+      this.$('[data-av="effect"]').textContent = on && cur && cur !== "off" ? cur : "None";
     }
 
     (c.attributes || []).forEach((x, j) => {
@@ -1400,11 +1481,13 @@ class SmartLightCard extends HTMLElement {
         const key = opts.join("|");
         if (sel.dataset.key !== key) {
           sel.dataset.key = key;
-          sel.style.setProperty("--cols", String(Math.min(opts.length, 4) || 1));
-          sel.innerHTML = opts.map((o) => `<button class="chip" data-opt="${esc(o)}">${esc(o)}</button>`).join("");
+          sel.innerHTML = opts.map((o) => `<button class="ddo" role="option" data-opt="${esc(o)}">${esc(o)}</button>`).join("");
         }
         const cur = this._hold(`sel:${x.entity}`, es.state, es.state);
-        sel.querySelectorAll("[data-opt]").forEach((b) => b.classList.toggle("on", b.dataset.opt === cur));
+        sel.querySelectorAll("[data-opt]").forEach((b) => {
+          b.classList.toggle("on", b.dataset.opt === cur);
+          b.setAttribute("aria-selected", String(b.dataset.opt === cur));
+        });
       }
     });
   }
@@ -1443,7 +1526,7 @@ class SmartLightCard extends HTMLElement {
     const motionOn = !c.motion?.enabled || this._isOnId(c.motion.enabled);
 
     // Motion control
-    const x = c.auto_off;
+    const x = c.motion_control;
     if (x) {
       const autoOn = !x.enabled || this._isOnId(x.enabled);
       const live = autoOn && motionOn;
@@ -1610,7 +1693,7 @@ const GROUPS = [
     ],
   },
   {
-    key: "auto_off",
+    key: "motion_control",
     title: "Motion control",
     desc: "Off after the room has been empty for a while, dimming first.",
     schema: [
@@ -1644,7 +1727,8 @@ class SmartLightCardEditor extends HTMLElement {
   setConfig(config) {
     // HA hands back each change we send: don't redraw for those, or fields lose focus
     const ours = this._sent && JSON.stringify(config) === JSON.stringify(this._sent);
-    this._config = { ...config };
+    // (an older config's auto_off is saved as motion_control from the next change)
+    this._config = { ...renamed(config) };
     if (!ours) this._build();
   }
 
@@ -1677,12 +1761,12 @@ class SmartLightCardEditor extends HTMLElement {
     this.dispatchEvent(new CustomEvent("config-changed", { detail: { config }, bubbles: true, composed: true }));
   }
 
-  _form(schema, data, onChange) {
+  _form(schema, data, onChange, labels = {}) {
     const f = document.createElement("ha-form");
     f.hass = this._hass;
     f.schema = schema;
     f.data = data;
-    f.computeLabel = (s) => LABELS[s.name] || s.name;
+    f.computeLabel = (s) => labels[s.name] || LABELS[s.name] || s.name;
     f.addEventListener("value-changed", (e) => {
       e.stopPropagation();
       onChange(e.detail.value);
@@ -1893,26 +1977,30 @@ class SmartLightCardEditor extends HTMLElement {
     if (Object.keys(f).length) {
       box.querySelector("p").textContent = "Set up by Knit: its switches and settings appear here by themselves. Hide a section to keep it off the card (it keeps working).";
       [
-        ["auto_off", "Motion control", f.motion || f.auto_off],
-        ["light_level", "Light level", f.light_level],
-      ].forEach(([key, title, has]) => {
+        ["motion_control", "Hide motion control settings", f.motion || f.auto_off],
+        ["light_level", "Hide light level settings", f.light_level],
+      ].forEach(([key, label, has]) => {
         if (!has) return;
         const el = document.createElement("div");
         el.className = "grp";
-        el.innerHTML = `<div class="grp-h"><b>${title}</b></div>`;
         const cur = this._config[key] || {};
         el.appendChild(
-          this._form([HIDE], { hidden: Boolean(cur.hidden) }, (v) => {
-            const next = { ...this._config };
-            if (v.hidden) next[key] = { ...cur, hidden: true };
-            else {
-              const rest = { ...cur };
-              delete rest.hidden;
-              if (Object.keys(rest).length) next[key] = rest;
-              else delete next[key];
-            }
-            this._changed(next);
-          })
+          this._form(
+            [HIDE],
+            { hidden: Boolean(cur.hidden) },
+            (v) => {
+              const next = { ...this._config };
+              if (v.hidden) next[key] = { ...cur, hidden: true };
+              else {
+                const rest = { ...cur };
+                delete rest.hidden;
+                if (Object.keys(rest).length) next[key] = rest;
+                else delete next[key];
+              }
+              this._changed(next);
+            },
+            { hidden: label }
+          )
         );
         box.appendChild(el);
       });
@@ -1932,11 +2020,16 @@ class SmartLightCardEditor extends HTMLElement {
       });
       if (included)
         el.appendChild(
-          this._form(g.schema, this._config[g.key], (v) => {
-            const val = { ...v };
-            Object.keys(val).forEach((k) => (val[k] === "" || val[k] === undefined || (k === "hidden" && !val[k])) && delete val[k]);
-            this._changed({ ...this._config, [g.key]: val });
-          })
+          this._form(
+            g.schema,
+            this._config[g.key],
+            (v) => {
+              const val = { ...v };
+              Object.keys(val).forEach((k) => (val[k] === "" || val[k] === undefined || (k === "hidden" && !val[k])) && delete val[k]);
+              this._changed({ ...this._config, [g.key]: val });
+            },
+            { hidden: `Hide ${g.title.toLowerCase()} settings` }
+          )
         );
       box.appendChild(el);
     });

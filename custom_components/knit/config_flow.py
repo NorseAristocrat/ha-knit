@@ -17,7 +17,6 @@ from .const import (
     CONF_OFF_AFTER_OUTAGE,
     CONF_PAUSE,
     CONF_PAUSE_MATCH,
-    CONF_PEOPLE,
     CONF_POWER,
     CONF_PRESENCE,
     CONF_START_ON,
@@ -43,9 +42,15 @@ def _ent(**kw):
     return selector.EntitySelector(selector.EntitySelectorConfig(**kw))
 
 
-# the fields each kind of device can change later (options)
+# what each kind of device can be built around (its base entity)
+BASE_DOMAINS = {
+    TYPE_LIGHT: ["light", "switch"],
+    TYPE_SWITCH: ["switch", "light", "fan", "input_boolean"],
+}
+
+# the fields each kind of device can change later (options), besides its base entity
 OPTION_FIELDS = {
-    TYPE_LIGHT: (CONF_PRESENCE, CONF_ILLUMINANCE, CONF_PAUSE, CONF_PAUSE_MATCH, CONF_PEOPLE),
+    TYPE_LIGHT: (CONF_PRESENCE, CONF_ILLUMINANCE, CONF_PAUSE, CONF_PAUSE_MATCH),
     TYPE_SWITCH: (CONF_PRESENCE, CONF_PAUSE, CONF_PAUSE_MATCH, CONF_OFF_AFTER_OUTAGE),
     TYPE_APPLIANCE: (CONF_DOOR, *CONF_STATUS_NAMES.values()),
 }
@@ -72,9 +77,6 @@ def _schema(kind: str, d: dict) -> dict:
     fields[vol.Optional(CONF_PAUSE_MATCH, default=d.get(CONF_PAUSE_MATCH) or "any")] = selector.SelectSelector(
         selector.SelectSelectorConfig(options=["any", "all"], translation_key=CONF_PAUSE_MATCH, mode=selector.SelectSelectorMode.LIST)
     )
-    # a motion-controlled device is never turned on, so nobody being home changes nothing for it
-    if kind == TYPE_LIGHT:
-        fields[_opt(d, CONF_PEOPLE)] = _ent(domain=["person", "device_tracker"], multiple=True)
     if kind == TYPE_SWITCH:
         fields[vol.Optional(CONF_OFF_AFTER_OUTAGE, default=bool(d.get(CONF_OFF_AFTER_OUTAGE, True)))] = selector.BooleanSelector()
     return fields
@@ -97,7 +99,7 @@ class KnitConfigFlow(ConfigFlow, domain=DOMAIN):
         if user_input is not None:
             return await self._create(TYPE_LIGHT, user_input[CONF_LIGHT], user_input)
         schema = {
-            vol.Required(CONF_LIGHT): _ent(domain=["light", "switch"]),
+            vol.Required(CONF_LIGHT): _ent(domain=BASE_DOMAINS[TYPE_LIGHT]),
             vol.Optional(CONF_NAME): selector.TextSelector(),
             **_schema(TYPE_LIGHT, {}),
             vol.Optional(CONF_START_ON, default=True): selector.BooleanSelector(),
@@ -108,7 +110,7 @@ class KnitConfigFlow(ConfigFlow, domain=DOMAIN):
         if user_input is not None:
             return await self._create(TYPE_SWITCH, user_input[CONF_LIGHT], user_input)
         schema = {
-            vol.Required(CONF_LIGHT): _ent(domain=["switch", "light", "fan", "input_boolean"]),
+            vol.Required(CONF_LIGHT): _ent(domain=BASE_DOMAINS[TYPE_SWITCH]),
             vol.Optional(CONF_NAME): selector.TextSelector(),
             **_schema(TYPE_SWITCH, {}),
             vol.Optional(CONF_START_ON, default=True): selector.BooleanSelector(),
@@ -137,16 +139,36 @@ class KnitConfigFlow(ConfigFlow, domain=DOMAIN):
 
 class KnitOptionsFlow(OptionsFlow):
     async def async_step_init(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
-        kind = self.config_entry.data.get(CONF_TYPE, TYPE_LIGHT)
+        entry = self.config_entry
+        kind = entry.data.get(CONF_TYPE, TYPE_LIGHT)
+        # what it's built around: a light / switch, or an appliance's power sensor
+        key = CONF_POWER if kind == TYPE_APPLIANCE else CONF_LIGHT
+        current = {**entry.data, **entry.options}
         errors: dict = {}
         if user_input is not None:
+            base = user_input.get(key) or current[key]
             if kind == TYPE_APPLIANCE and _names_clash(user_input):
                 errors["base"] = "same_names"
-            else:
+            elif base != current[key]:
+                # the base entity changed: the device moves to it, keeping its entities, settings and cards
+                unique_id = f"{kind}:{base}"
+                taken = any(
+                    e.unique_id == unique_id and e.entry_id != entry.entry_id
+                    for e in self.hass.config_entries.async_entries(DOMAIN)
+                )
+                if taken:
+                    errors[key] = "already_configured"
+                else:
+                    self.hass.config_entries.async_update_entry(
+                        entry, data={**entry.data, key: base}, unique_id=unique_id
+                    )
+            if not errors:
                 # a field cleared in the form is left out of user_input: save it as cleared
                 return self.async_create_entry(data={k: user_input.get(k) for k in OPTION_FIELDS[kind]})
-        current = {**self.config_entry.data, **self.config_entry.options, **(user_input or {})}
-        return self.async_show_form(step_id=kind, data_schema=vol.Schema(_schema(kind, current)), errors=errors)
+            current = {**current, **user_input}
+        base_selector = _ent(domain="sensor", device_class="power") if kind == TYPE_APPLIANCE else _ent(domain=BASE_DOMAINS[kind])
+        schema = {vol.Required(key, default=current[key]): base_selector, **_schema(kind, current)}
+        return self.async_show_form(step_id=kind, data_schema=vol.Schema(schema), errors=errors)
 
     # the form is shown under the device kind's own step, for its own labels
     async def async_step_light(self, user_input=None):
