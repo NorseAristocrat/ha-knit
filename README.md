@@ -248,11 +248,6 @@ button:                            # optional button on the right
   show: when_on                    # always | when_on (while any of them is on)
 ```
 
-## The GIFs in this page
-
-The pictures above are placeholders until the recordings are made. Each one says what to record;
-replace the file of the same name in `images/demo/` (about 960 × 540, a few seconds each).
-
 ## Development
 
 The decisions live in `custom_components/knit/engine.py`, with no Home Assistant in it:
