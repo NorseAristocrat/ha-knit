@@ -9,7 +9,7 @@ from homeassistant.helpers.dispatcher import async_dispatcher_connect
 from homeassistant.helpers.entity import Entity
 from homeassistant.util import slugify
 
-from .const import ATTR_DEVICE, ATTR_ROLE, CONF_TYPE, DOMAIN, SIGNAL_UPDATE, TYPE_APPLIANCE, TYPE_LIGHT, TYPE_SWITCH
+from .const import ATTR_DEVICE, ATTR_ROLE, CONF_TYPE, DOMAIN, SIGNAL_UPDATE, TYPE_LIGHT, TYPE_SWITCH
 
 # the end of each entity id: <domain>.knit_<device name>_<this>
 OBJECT_IDS = {
@@ -21,7 +21,6 @@ OBJECT_IDS = {
 MODELS = {
     TYPE_LIGHT: "Light",
     TYPE_SWITCH: "Motion-controlled device",
-    TYPE_APPLIANCE: "Appliance",
 }
 
 

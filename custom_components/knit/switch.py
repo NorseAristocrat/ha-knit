@@ -13,15 +13,13 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.restore_state import RestoreEntity
 
-from .const import CONF_START_ON, DOMAIN, ROLE_LIGHT_LEVEL, ROLE_MOTION, SETTING, TYPE_APPLIANCE, TYPE_SWITCH
+from .const import CONF_START_ON, DOMAIN, ROLE_LIGHT_LEVEL, ROLE_MOTION, SETTING, TYPE_SWITCH
 from .entity import KnitEntity, features, kind
 
 ICONS = {ROLE_MOTION: "mdi:motion-sensor", ROLE_LIGHT_LEVEL: "mdi:theme-light-dark"}
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, add: AddEntitiesCallback) -> None:
-    if kind(entry) == TYPE_APPLIANCE:
-        return
     controller = hass.data[DOMAIN][entry.entry_id]
     start_on = entry.data.get(CONF_START_ON, True)
     motion, level = features(entry)

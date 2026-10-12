@@ -1,28 +1,24 @@
-"""Countdowns (when the motion timeout, the off-when-light and an appliance's cycle end), the light
-level a light judges, and the light a device runs (for the card)."""
+"""Countdowns (when the motion timeout and the off-when-light end), the light level a light
+judges, and the light a device runs (for the card)."""
 
 from __future__ import annotations
 
 from datetime import datetime, timedelta
 
-from homeassistant.components.sensor import RestoreSensor, SensorDeviceClass, SensorEntity, SensorStateClass
+from homeassistant.components.sensor import SensorDeviceClass, SensorEntity, SensorStateClass
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import LIGHT_LUX, EntityCategory
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.restore_state import RestoreEntity
-from homeassistant.util import dt as dt_util
 
-from .const import DOMAIN, ROLE_AUTO_OFF_ENDS, ROLE_CYCLE_ENDS, ROLE_ILLUMINANCE, ROLE_LIGHT, ROLE_OFF_WHEN_LIGHT_ENDS, TYPE_APPLIANCE
+from .const import DOMAIN, ROLE_AUTO_OFF_ENDS, ROLE_ILLUMINANCE, ROLE_LIGHT, ROLE_OFF_WHEN_LIGHT_ENDS
 from .engine import Countdown
-from .entity import KnitEntity, LiveEntity, features, kind
+from .entity import LiveEntity, features
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, add: AddEntitiesCallback) -> None:
     controller = hass.data[DOMAIN][entry.entry_id]
-    if kind(entry) == TYPE_APPLIANCE:
-        add([CycleEnds(entry, controller, ROLE_CYCLE_ENDS)])
-        return
     motion, level = features(entry)
     ends = ([Ends(entry, controller, ROLE_AUTO_OFF_ENDS)] if motion else []) + ([Ends(entry, controller, ROLE_OFF_WHEN_LIGHT_ENDS)] if level else [])
     level = [LightLevel(entry, controller, ROLE_ILLUMINANCE)] if level else []
@@ -111,36 +107,4 @@ class Ends(LiveEntity, SensorEntity):
             dim_at = self.controller.engine.dim_at if self.role == ROLE_AUTO_OFF_ENDS else None
             if dim_at:
                 attrs["dim_at"] = dim_at.isoformat()
-        return attrs
-
-
-class CycleEnds(LiveEntity, RestoreSensor):
-    """When an appliance's cycle is expected to end (the card's countdown); kept over a restart."""
-
-    _platform = "sensor"
-    _attr_device_class = SensorDeviceClass.TIMESTAMP
-    _attr_icon = "mdi:timer-sand"
-
-    async def async_added_to_hass(self) -> None:
-        await super().async_added_to_hass()
-        last = await self.async_get_last_state()
-        if last is not None and last.state not in ("unknown", "unavailable"):
-            ends = dt_util.parse_datetime(last.state)
-            total = last.attributes.get("duration")
-            secs = None
-            if total:
-                h, m, s = (int(x) for x in str(total).split(":"))
-                secs = h * 3600 + m * 60 + s
-            self.controller.restore(None, ends, secs)
-
-    @property
-    def native_value(self) -> datetime | None:
-        return self.controller.engine.cycle_ends
-
-    @property
-    def extra_state_attributes(self) -> dict:
-        attrs = super().extra_state_attributes
-        e = self.controller.engine
-        if e.cycle_ends and e.cycle_total:
-            attrs["duration"] = str(timedelta(seconds=round(e.cycle_total)))
         return attrs

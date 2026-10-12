@@ -6,26 +6,20 @@ from dataclasses import dataclass
 
 from homeassistant.components.number import NumberMode, RestoreNumber
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import LIGHT_LUX, EntityCategory, UnitOfPower, UnitOfTime
+from homeassistant.const import LIGHT_LUX, EntityCategory, UnitOfTime
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from .const import (
     DOMAIN,
     ROLE_AUTO_OFF_TIME,
-    ROLE_CYCLE_LENGTH,
-    ROLE_EMPTY_AFTER,
-    ROLE_FINISHED_AFTER,
-    ROLE_RUNNING_ABOVE,
-    ROLE_RUNNING_AFTER,
-    TYPE_APPLIANCE,
     ROLE_DARK_BELOW,
     ROLE_DIM_TIME,
     ROLE_LIGHT_ABOVE,
     ROLE_OFF_AFTER,
     SETTING,
 )
-from .entity import KnitEntity, dimmable, features, kind
+from .entity import KnitEntity, dimmable, features
 
 
 @dataclass(frozen=True)
@@ -44,13 +38,6 @@ MOTION = [
     Spec(ROLE_DIM_TIME, UnitOfTime.SECONDS, 0, 2700, 1, 60, "mdi:brightness-5"),
 ]
 OFF_AFTER = Spec(ROLE_OFF_AFTER, UnitOfTime.SECONDS, 0, 3600, 1, 300, "mdi:weather-sunny")
-APPLIANCE = [
-    Spec(ROLE_RUNNING_ABOVE, UnitOfPower.WATT, 0, 5000, 1, 20, "mdi:flash"),
-    Spec(ROLE_RUNNING_AFTER, UnitOfTime.SECONDS, 0, 3600, 1, 60, "mdi:timer-play-outline"),
-    Spec(ROLE_FINISHED_AFTER, UnitOfTime.SECONDS, 0, 7200, 1, 300, "mdi:timer-sand-complete"),
-    Spec(ROLE_CYCLE_LENGTH, UnitOfTime.SECONDS, 0, 21600, 60, 7200, "mdi:timer-outline"),
-    Spec(ROLE_EMPTY_AFTER, UnitOfTime.SECONDS, 0, 600, 1, 60, "mdi:door-open"),
-]
 LEVELS = [
     Spec(ROLE_DARK_BELOW, LIGHT_LUX, 0, 2000, 0.1, 10, "mdi:weather-sunset-down"),
     Spec(ROLE_LIGHT_ABOVE, LIGHT_LUX, 0, 2000, 0.1, 15, "mdi:weather-sunny"),
@@ -59,9 +46,6 @@ LEVELS = [
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, add: AddEntitiesCallback) -> None:
     controller = hass.data[DOMAIN][entry.entry_id]
-    if kind(entry) == TYPE_APPLIANCE:
-        add([Setting(entry, controller, s) for s in APPLIANCE])
-        return
     motion, level = features(entry)
     specs = list(MOTION) if motion else []
     # a light that can't be dimmed (a switch, an on / off light) has no dim before off
