@@ -238,6 +238,7 @@ name: Living room lamp             # optional: else the light's name
 icon: mdi:floor-lamp-outline
 primary: [216, 192, 151]           # the card's colour (every shade is worked out from it),
                                    # or color: sand | red | blue | green | teal | steel | purple
+radius: 15                         # the card's corner radius in px (0 to 30; 15 unless set)
 secondary: [state, brightness, countdown]   # the line under the name
 attributes:                        # the rows in the open card, in order
   - brightness
