@@ -189,6 +189,20 @@ class AutoOff(unittest.TestCase):
         e.set_paused(False, at(100))
         self.assertEqual(e.next_deadline(), at(100 + 240))
 
+    def test_pause_ending_turns_on_when_dark(self):
+        # Light level alone (no Motion): it got dark during the pause
+        e = make(dark_below=5, motion=False)
+        e.set_lux(50.0, at(1))
+        e.set_paused(True, at(2))
+        self.assertEqual(kinds(e.set_lux(1.0, at(10))), [])
+        self.assertEqual(kinds(e.set_paused(False, at(100))), [(ON, None)])
+
+    def test_pause_ending_stays_off_when_light(self):
+        e = make(dark_below=5, motion=False)
+        e.set_lux(50.0, at(1))
+        e.set_paused(True, at(2))
+        self.assertEqual(kinds(e.set_paused(False, at(100))), [])
+
     def test_back_just_as_it_goes_off_turns_it_on(self):
         e = make(dark_below=5)
         e.set_light(True, 200, T0)

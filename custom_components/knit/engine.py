@@ -165,13 +165,15 @@ class Engine:
         if paused:
             self.light = None
             return self._cancel_auto(restore=True)
-        # the pause is over: a light left on in an empty room counts down, and one on while it
-        # counts as light starts its off-when-light countdown, as if they'd just happened
+        # the pause is over: a light left on in an empty room counts down, one on while it
+        # counts as light starts its off-when-light countdown, and one that follows the light
+        # level alone comes on if it's dark, as if they'd just happened
         out: list[Action] = []
         if self.occupied is False:
             out += self._maybe_start_auto(now)
         if self.light_on and self.dark is False:
             out += self._start_light(now)
+        out += self._on_when_dark()
         return out
 
     def update_settings(self, now: datetime, **changes) -> list[Action]:
