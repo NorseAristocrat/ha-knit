@@ -2337,11 +2337,389 @@ class SmartLightSectionEditor extends HTMLElement {
   }
 }
 
+// ---- knit-appliance-card -----------------------------------------------------------------
+/*
+ * A Knit appliance (a dishwasher, a washing machine) as a tile: its status and the cycle's
+ * countdown ("Running · 0:45 left"), filling as the cycle goes and pulsing while it's Full.
+ * Opening it shows buttons to correct the status, its power and door, and under More controls
+ * how it tells running / finished / emptied, as one sentence with the values in place.
+ *
+ *   type: custom:knit-appliance-card
+ *   device: <the Knit appliance>          # or entity: select.knit_washing_machine_status (any of its entities)
+ *   name: Washing machine                # optional: else the device's name
+ *   icon: mdi:washing-machine
+ *   color: blue                          # or primary: [r, g, b]
+ */
+const APPLIANCE_ICONS = { empty: "mdi:checkbox-blank-circle-outline", running: "mdi:play-circle-outline", full: "mdi:check-circle-outline" };
+const APPLIANCE_CSS = `
+  /* Full: pulses outside its border, as the Home page's tiles do (on the card, or on the tile and
+     panel while it's spread across the row, where they carry the border) */
+  :host(:not(.wide)) ha-card.full, :host(.wide) ha-card.full .tile, :host(.wide) ha-card.full .panel { animation: pulse 2s ease-in-out infinite; }
+  @keyframes pulse { 50% { box-shadow: 0 0 0 3px var(--soft); } }
+  .srcs { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+  .srcs .tr { display: flex; align-items: center; gap: 8px; min-width: 0; --mdc-icon-size: 18px; }
+  .srcs .tr ha-icon { flex: none; opacity: 0.8; }
+  .srcs .tr.ok ha-icon { opacity: 1; color: var(--prime); }
+  .srcs .tx { min-width: 0; display: flex; flex-direction: column; }
+  .srcs .l { font-size: 12px; font-weight: 600; }
+  .srcs .v { font-size: 11px; opacity: 0.8; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .chips .chip ha-icon { --mdc-icon-size: 16px; margin-right: 4px; }
+  /* no On / Off button here: the sentence can use the whole width */
+  .grp.nobtn > .sent { margin-right: 0; }
+`;
+
+class KnitApplianceCard extends HTMLElement {
+  static getConfigElement() {
+    return document.createElement("knit-appliance-card-editor");
+  }
+
+  static getStubConfig(hass) {
+    const st = Object.values(hass?.states || {}).find((s) => s.attributes.role === "status" && s.attributes.knit);
+    return st ? { device: hass.entities?.[st.entity_id]?.device_id } : { device: "" };
+  }
+
+  setConfig(config) {
+    if (!config?.device && !config?.entity) throw new Error("Pick a Knit appliance (device), or one of its entities (entity)");
+    this._config = { ...config };
+    this._pending = {};
+    const mem = OPEN.get(config.device || config.entity);
+    this._open = mem?.open ?? this._open ?? false;
+    this._ctlOpen = mem?.ctl ?? this._ctlOpen ?? false;
+    this._drawn = false;
+    if (this._hass) this._dom();
+  }
+
+  set hass(hass) {
+    this._hass = hass;
+    if (!this._config) return;
+    // given one of its entities (e.g. its Status): the device it belongs to
+    if (!this._config.device && this._config.entity) {
+      const device = hass.entities?.[this._config.entity]?.device_id;
+      if (!device) {
+        if (!this.shadowRoot) this.attachShadow({ mode: "open" });
+        this.shadowRoot.innerHTML = `<ha-card style="padding:16px">Waiting for the Knit appliance…</ha-card>`;
+        return;
+      }
+      this._config.device = device;
+    }
+    if (!this._drawn) this._dom();
+    else this._render();
+  }
+
+  connectedCallback() {
+    this._tick = setInterval(() => this._hass && this._drawn && this._render(), 1000);
+    this._onOther = (e) => {
+      if (e.detail !== this && this._open && this._config?.collapse_others !== false) this._setOpen(false);
+    };
+    window.addEventListener(OPENED_EVENT, this._onOther);
+    // open before it was in the dashboard: widened once it's in its place
+    requestAnimationFrame(() => this._open && widen(this, true));
+    this._onResize = () => requestAnimationFrame(() => rewiden(this));
+    window.addEventListener("resize", this._onResize);
+  }
+
+  disconnectedCallback() {
+    clearInterval(this._tick);
+    window.removeEventListener(OPENED_EVENT, this._onOther);
+    window.removeEventListener("resize", this._onResize);
+    widen(this, false);
+  }
+
+  getCardSize() {
+    return this._open ? 5 : 1;
+  }
+
+  getGridOptions() {
+    return { columns: 6, min_columns: 4, rows: "auto" };
+  }
+
+  $(sel) {
+    return this.shadowRoot.querySelector(sel);
+  }
+
+  $$(sel) {
+    return this.shadowRoot.querySelectorAll(sel);
+  }
+
+  _st(id) {
+    return id ? this._hass?.states[id] : undefined;
+  }
+
+  // the device's entities, by role
+  _roles() {
+    const out = {};
+    for (const e of Object.values(this._hass?.entities || {})) {
+      if (e.device_id !== this._config.device) continue;
+      const role = this._hass.states[e.entity_id]?.attributes.role;
+      if (role) out[role] = e.entity_id;
+    }
+    return out;
+  }
+
+  _hold(key, actual) {
+    const p = this._pending[key];
+    if (p) {
+      if (actual === p.value || Date.now() > p.until) delete this._pending[key];
+      else return p.value;
+    }
+    return actual;
+  }
+
+  _send(key, value, domain, service, data) {
+    this._pending[key] = { value, until: Date.now() + PENDING_MS };
+    this._render();
+    this._hass.callService(domain, service, data).catch(() => {
+      delete this._pending[key];
+      this._render();
+    });
+  }
+
+  _title() {
+    if (this._config.name) return this._config.name;
+    const dev = this._hass?.devices?.[this._config.device];
+    return dev?.name_by_user || dev?.name || "Appliance";
+  }
+
+  _tin(key, label) {
+    return `<span class="tin" data-tin="${key}"><span class="tbox"><input class="mm" type="number" inputmode="numeric" min="0" data-tm aria-label="${esc(label)} minutes"><span class="colon">:</span><input type="number" inputmode="numeric" min="0" max="59" data-ts aria-label="${esc(label)} seconds"></span></span>`;
+  }
+
+  _dom() {
+    if (!this.shadowRoot) this.attachShadow({ mode: "open" });
+    const r = (this._r = this._roles());
+    if (!r.status) {
+      this.shadowRoot.innerHTML = `<ha-card style="padding:16px">Waiting for the Knit appliance…</ha-card>`;
+      return;
+    }
+    this._drawn = true;
+    const c = this._config;
+    const st = this._st(r.status);
+    const door = st?.attributes.door;
+    const title = this._title();
+    // what its statuses are called (they can be renamed in Knit), in order: Empty, Running, Full
+    const statuses = st?.attributes.options || ["Empty", "Running", "Full"];
+    // "Running once over [20] W for [01:00] mins, and finished once under it for [05:00] mins. ..."
+    const num = `<span class="num"><input type="number" inputmode="decimal" data-n="running_above" aria-label="Running above"><span class="u">W</span></span>`;
+    const sentence = [
+      `Running once over ${num} for ${this._tin("running_after", "Running after")} mins, and finished once under it for ${this._tin("finished_after", "Finished after")} mins.`,
+      ` A cycle takes about ${this._tin("cycle_length", "Cycle length")} mins.`,
+      door ? ` Emptied once the door has been open ${this._tin("empty_after", "Emptied after")} mins.` : "",
+    ].join("");
+    this.shadowRoot.innerHTML = `<style>${CSS(colorsOf(c))}${APPLIANCE_CSS}</style><ha-card>
+      <div class="tile" role="button" tabindex="0" aria-label="${esc(title)}">
+        <div class="face"><div class="fill"></div></div>
+        <div class="ic"><ha-icon icon="${esc(c.icon || "mdi:washing-machine")}"></ha-icon></div>
+        <div class="txt"><div class="n">${esc(title)}</div><div class="s"></div></div>
+        <button class="exp" aria-label="More for ${esc(title)}" aria-expanded="false"><ha-icon icon="mdi:chevron-down"></ha-icon></button>
+      </div>
+      <div class="panel" hidden>
+        <div class="part"><div class="row"><div class="title"><ha-icon icon="mdi:list-status"></ha-icon><span>Status</span></div></div>
+          <div class="chips" style="--cols: ${statuses.length}">${statuses
+            .map((o, i) => `<button class="chip" data-opt="${esc(o)}"><ha-icon icon="${APPLIANCE_ICONS[["empty", "running", "full"][i]] || "mdi:circle-outline"}"></ha-icon>${esc(o)}</button>`)
+            .join("")}</div></div>
+        <div class="part"><div class="srcs">
+          <div class="tr" data-src="power"><ha-icon icon="mdi:flash-outline"></ha-icon><span class="tx"><span class="l">Power</span><span class="v"></span></span></div>
+          ${door ? `<div class="tr" data-src="door"><ha-icon icon="mdi:door"></ha-icon><span class="tx"><span class="l">Door</span><span class="v"></span></span></div>` : ""}
+        </div></div>
+        <div class="part"><button class="xrow" data-ctl aria-expanded="false"><ha-icon icon="mdi:tune-variant"></ha-icon><span class="lb">More controls</span><ha-icon class="chev" icon="mdi:chevron-down"></ha-icon></button>
+          <div class="mset" hidden><div class="grp nobtn"><div class="title"><ha-icon icon="mdi:auto-fix"></ha-icon><span>Detection</span></div><div class="end"></div>
+            <div class="sent">${sentence}</div></div></div></div>
+      </div></ha-card>`;
+    this._bind();
+    this._setOpen(this._open);
+    if (this._ctlOpen) this._showCtl(true);
+  }
+
+  _bind() {
+    const r = this._r;
+    const toggle = () => this._setOpen(!this._open, true);
+    this.$(".tile").addEventListener("click", toggle);
+    this.$(".tile").addEventListener("keydown", (e) => {
+      if (e.key === "Enter" || e.key === " ") {
+        e.preventDefault();
+        toggle();
+      }
+    });
+    this.$(".exp").addEventListener("click", (e) => {
+      e.stopPropagation();
+      toggle();
+    });
+    this.$("[data-ctl]").addEventListener("click", () => this._showCtl(!this._ctlOpen));
+    this.$(".chips").addEventListener("click", (e) => {
+      const b = e.target.closest("[data-opt]");
+      if (b) this._send("status", b.dataset.opt, "select", "select_option", { entity_id: r.status, option: b.dataset.opt });
+    });
+    // times: mm:ss, saved in seconds
+    this.$$("[data-tin]").forEach((box) => {
+      const mm = box.querySelector("[data-tm]");
+      const ss = box.querySelector("[data-ts]");
+      const id = r[box.dataset.tin];
+      const commit = () => {
+        const t = Math.max(0, Math.floor(Number(mm.value) || 0)) * 60 + Math.max(0, Math.floor(Number(ss.value) || 0));
+        const a = this._st(id)?.attributes || {};
+        const step = Number(a.step) || 1;
+        const v = clamp(Math.round(t / step) * step, Number(a.min ?? 0), Number(a.max ?? Infinity));
+        this._send(`n:${id}`, v, "number", "set_value", { entity_id: id, value: v });
+      };
+      [mm, ss].forEach((inp) => {
+        inp.addEventListener("focus", () => inp.select());
+        inp.addEventListener("change", commit);
+        inp.addEventListener("keydown", (e) => e.key === "Enter" && inp.blur());
+      });
+    });
+    const w = this.$('[data-n="running_above"]');
+    w?.addEventListener("change", () => {
+      const v = Number(w.value);
+      if (w.value !== "" && Number.isFinite(v)) this._send(`n:${r.running_above}`, v, "number", "set_value", { entity_id: r.running_above, value: v });
+    });
+    w?.addEventListener("keydown", (e) => e.key === "Enter" && w.blur());
+  }
+
+  _setOpen(open, byUser) {
+    this._open = open;
+    OPEN.set(this._config.device, { open, ctl: this._ctlOpen });
+    // the others close first, so this one is measured beside them closed
+    if (open && byUser && this._config.collapse_others !== false) window.dispatchEvent(new CustomEvent(OPENED_EVENT, { detail: this }));
+    this.$(".panel").hidden = !open;
+    this.$("ha-card").classList.toggle("open", open);
+    this.$(".exp").setAttribute("aria-expanded", String(open));
+    widen(this, open);
+    this._render();
+  }
+
+  _showCtl(open) {
+    this._ctlOpen = open;
+    OPEN.set(this._config.device, { open: this._open, ctl: open });
+    const b = this.$("[data-ctl]");
+    b.setAttribute("aria-expanded", String(open));
+    b.querySelector(".lb").textContent = open ? "Less controls" : "More controls";
+    this.$(".mset").hidden = !open;
+    if (this._open) widen(this, true); // More controls open: across the row
+  }
+
+  _render() {
+    if (!this._hass || !this._drawn) return;
+    // light or dark shades, as the light card picks them
+    SmartLightCard.prototype._theme.call(this);
+    const r = this._r;
+    const st = this._st(r.status);
+    const status = this._hold("status", st?.state);
+    // Empty, Running or Full, whatever it's called: from the select's attribute, or (a status
+    // just picked here) its place among the options
+    const opts = st?.attributes.options || ["Empty", "Running", "Full"];
+    const key = status === st?.state && st?.attributes.status ? st.attributes.status : ["Empty", "Running", "Full"][opts.indexOf(status)] || status;
+    const tile = this.$(".tile");
+    const ends = this._st(r.cycle_ends);
+    const left = key === "Running" ? secsLeft(ends) : undefined;
+    const total = durationSecs(ends?.attributes.duration);
+    let sub = !st || NO_VALUE.includes(st.state) ? "Unavailable" : status;
+    if (left !== undefined) sub = `${status} · ${clock(left)} left`;
+    tile.querySelector(".s").textContent = sub;
+    tile.classList.toggle("on", key !== "Empty" && Boolean(st));
+    tile.classList.toggle("full", key === "Full");
+    this.$("ha-card").classList.toggle("full", key === "Full");
+    tile.querySelector(".fill").style.width = left !== undefined && total ? `${clamp(100 * (1 - left / total), 0, 100)}%` : "0%";
+    this.$("ha-card").classList.toggle("on", key !== "Empty" && Boolean(st));
+    if (!this._open) return;
+    this.$$(".chips [data-opt]").forEach((b) => b.classList.toggle("on", b.dataset.opt === status));
+    // power and door
+    const p = this._st(st?.attributes.power);
+    const pv = Number(p?.state);
+    const pEl = this.$('[data-src="power"]');
+    pEl.querySelector(".v").textContent = !p || NO_VALUE.includes(p.state) ? "No reading" : `${Number.isFinite(pv) ? Math.round(pv) : p.state} ${p.attributes.unit_of_measurement || "W"}`;
+    const above = Number(this._st(r.running_above)?.state);
+    pEl.classList.toggle("ok", Number.isFinite(pv) && Number.isFinite(above) && pv > above);
+    const d = this._st(st?.attributes.door);
+    const dEl = this.$('[data-src="door"]');
+    if (dEl) {
+      dEl.querySelector(".v").textContent = !d || NO_VALUE.includes(d.state) ? "Offline" : `${d.state === "on" ? "Open" : "Closed"} · ${ago(d.last_changed)}`;
+      dEl.classList.toggle("ok", d?.state === "on");
+      dEl.querySelector("ha-icon").setAttribute("icon", d?.state === "on" ? "mdi:door-open" : "mdi:door-closed");
+    }
+    // the settings
+    const focused = (el) => el.contains(this.shadowRoot.activeElement);
+    this.$$("[data-tin]").forEach((box) => {
+      const id = r[box.dataset.tin];
+      const actual = Number(this._st(id)?.state);
+      const secs = Math.round(this._hold(`n:${id}`, actual));
+      if (focused(box) || !Number.isFinite(secs)) return;
+      box.querySelector("[data-tm]").value = String(Math.floor(secs / 60)).padStart(2, "0");
+      box.querySelector("[data-ts]").value = String(secs % 60).padStart(2, "0");
+    });
+    const w = this.$('[data-n="running_above"]');
+    if (w && !focused(w)) {
+      const v = this._hold(`n:${r.running_above}`, Number(this._st(r.running_above)?.state));
+      w.value = Number.isFinite(v) ? String(v) : "";
+    }
+  }
+}
+
+class KnitApplianceCardEditor extends HTMLElement {
+  setConfig(config) {
+    const ours = this._sent && JSON.stringify(config) === JSON.stringify(this._sent);
+    this._config = { ...config };
+    if (!ours) this._build();
+  }
+
+  set hass(hass) {
+    this._hass = hass;
+    if (!this._ready) {
+      this._ready = true;
+      this._build();
+    }
+    this.shadowRoot?.querySelectorAll("ha-form").forEach((f) => (f.hass = hass));
+  }
+
+  _build() {
+    if (!this._config || !this._hass) return;
+    if (!this.shadowRoot) this.attachShadow({ mode: "open" });
+    const c = this._config;
+    this.shadowRoot.innerHTML = `<style>${EDITOR_CSS}</style>
+      <div class="sec"><h3>Knit appliance</h3><p>The appliance set up in Knit: its status, countdown and settings come with it.</p></div>`;
+    const labels = { device: "Knit appliance", name: "Title", icon: "Icon", primary: "Primary colour", collapse_others: "Close other Knit cards when this one opens" };
+    const f = document.createElement("ha-form");
+    f.hass = this._hass;
+    f.schema = [
+      { name: "device", selector: { device: { integration: "knit" } } },
+      { type: "grid", name: "", schema: [{ name: "name", selector: { text: {} } }, { name: "icon", selector: { icon: {} } }] },
+      { name: "primary", selector: { color_rgb: {} } },
+      { name: "collapse_others", selector: { boolean: {} } },
+    ];
+    f.data = { ...c, primary: colorsOf(c).main, collapse_others: c.collapse_others !== false };
+    f.computeLabel = (x) => labels[x.name] || x.name;
+    f.addEventListener("value-changed", (e) => {
+      e.stopPropagation();
+      const v = e.detail.value;
+      const next = { ...this._config, ...v };
+      if (v.primary && JSON.stringify(v.primary) !== JSON.stringify(colorsOf(this._config).main)) {
+        delete next.color;
+        delete next.colors;
+      } else if (!this._config.primary) delete next.primary;
+      if (v.collapse_others) delete next.collapse_others;
+      else next.collapse_others = false;
+      Object.keys(next).forEach((k) => (next[k] === "" || next[k] === undefined) && delete next[k]);
+      this._config = next;
+      this._sent = next;
+      this.dispatchEvent(new CustomEvent("config-changed", { detail: { config: next }, bubbles: true, composed: true }));
+    });
+    this.shadowRoot.querySelector(".sec").appendChild(f);
+  }
+}
+
+if (!customElements.get("knit-appliance-card")) customElements.define("knit-appliance-card", KnitApplianceCard);
+if (!customElements.get("knit-appliance-card-editor")) customElements.define("knit-appliance-card-editor", KnitApplianceCardEditor);
+
 if (!customElements.get("knit-section")) customElements.define("knit-section", SmartLightSection);
 if (!customElements.get("knit-section-editor")) customElements.define("knit-section-editor", SmartLightSectionEditor);
 if (!customElements.get("knit-light-card")) customElements.define("knit-light-card", SmartLightCard);
 if (!customElements.get("knit-light-card-editor")) customElements.define("knit-light-card-editor", SmartLightCardEditor);
 window.customCards = window.customCards || [];
+if (!window.customCards.some((c) => c.type === "knit-appliance-card"))
+  window.customCards.push({
+    type: "knit-appliance-card",
+    name: "Knit Appliance Card",
+    description: "A Knit appliance (dishwasher, washing machine): status, cycle countdown, corrections and its detection settings.",
+  });
 if (!window.customCards.some((c) => c.type === "knit-section"))
   window.customCards.push({
     type: "knit-section",

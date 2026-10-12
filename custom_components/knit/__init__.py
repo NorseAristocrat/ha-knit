@@ -1,4 +1,4 @@
-"""Knit: knit your sensors into smart devices (lights, motion-controlled devices), with cards."""
+"""Knit: knit your sensors into smart devices (lights, motion-controlled devices, appliances), with cards."""
 
 from __future__ import annotations
 
@@ -12,13 +12,14 @@ from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers.typing import ConfigType
 from homeassistant.loader import async_get_integration
 
-from .const import CARD_FILE, CARD_URL, DOMAIN
+from .appliance_controller import ApplianceController
+from .const import CARD_FILE, CARD_URL, CONF_TYPE, DOMAIN, TYPE_APPLIANCE
 from .controller import LightController
 
 _LOGGER = logging.getLogger(__name__)
 # set up in the UI only (Settings → Devices & services), nothing in configuration.yaml
 CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
-PLATFORMS = [Platform.SWITCH, Platform.NUMBER, Platform.BINARY_SENSOR, Platform.SENSOR]
+PLATFORMS = [Platform.SWITCH, Platform.NUMBER, Platform.BINARY_SENSOR, Platform.SENSOR, Platform.SELECT]
 
 
 async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
@@ -60,7 +61,10 @@ async def _ensure_resource(hass: HomeAssistant, url: str) -> None:
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     conf = {**entry.data, **entry.options}
-    controller = LightController(hass, entry.entry_id, conf)
+    if entry.data.get(CONF_TYPE) == TYPE_APPLIANCE:
+        controller = ApplianceController(hass, entry.entry_id, entry.title, conf)
+    else:
+        controller = LightController(hass, entry.entry_id, conf)
     hass.data.setdefault(DOMAIN, {})[entry.entry_id] = controller
     # the entities restore their settings into the controller as they're added
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)

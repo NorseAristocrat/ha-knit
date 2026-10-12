@@ -31,6 +31,20 @@ Set a device up once: no helpers, automations or scripts.
 room has been empty for its Motion timeout; presence never turns it on. Optionally it's switched
 off again if it comes back on after a power cut.
 
+**Appliance**: a dishwasher, washing machine or dryer on a smart plug that reports power.
+
+- **Running** once the power has been above Running above for Running after; a cycle countdown
+  starts (Cycle length).
+- **Full** once it has been below it for Finished after, so pauses between wash phases don't end it.
+- **Empty** once the door has been open for Emptied after while it isn't drawing power (or, if the
+  door sensor missed the door closing, when it closes again while Full).
+- The status (a Status select: Empty / Running / Full) can be corrected by hand. Automations can
+  follow it, or the events `knit_appliance_started`, `knit_appliance_finished` and
+  `knit_appliance_emptied`, for your own notifications.
+- The three statuses can be renamed per appliance (Configure: e.g. Clean / Washing / Ready). The
+  select's options are the new names; its `status` attribute is always Empty, Running or Full,
+  so an automation can follow that instead of the names.
+
 A device only gets the entities for the sensors it's given. Every entity id starts `knit_` and the
 device's name, e.g. `switch.knit_living_room_lamp_motion`. Settings are under Configuration on the
 device page, and on the device's card.
@@ -44,6 +58,11 @@ hand: `/knit_static/knit-cards.js`).
 ```yaml
 type: custom:knit-light-card       # a light or a motion-controlled device
 device: <the Knit device>          # the editor's "Knit device" picker
+```
+
+```yaml
+type: custom:knit-appliance-card
+device: <the Knit appliance>
 ```
 
 Opening a card closes any other open one (`collapse_others: false` to opt out).
@@ -82,7 +101,8 @@ it, and switch them on once that automation is turned off, so the two don't both
 
 ## Development
 
-The decisions live in `custom_components/knit/engine.py`, with no Home Assistant in it:
+The decisions live in `custom_components/knit/engine.py` (lights) and `appliance.py`, with no Home
+Assistant in them:
 
 ```sh
 python3 -m unittest discover tests
