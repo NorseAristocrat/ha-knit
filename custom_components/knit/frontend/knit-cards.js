@@ -60,7 +60,7 @@
  * them all. `wide: false` keeps it at its own width.
  */
 
-const SLC_VERSION = "37";
+const SLC_VERSION = "38";
 const PENDING_MS = 8000;
 const RING = 2 * Math.PI * 19;
 // which cards are open (and their More controls), so a redraw (as the editor does) keeps it
@@ -1355,10 +1355,15 @@ class SmartLightCard extends HTMLElement {
   // light or dark shades: from the card's own background (a view can have its own theme),
   // else HA's dark mode, else the device's
   _theme() {
-    const m = getComputedStyle(this.$("ha-card")).backgroundColor.match(/rgba?\(([^)]+)\)/);
-    const v = m ? m[1].split(",").map((x) => Number(x)) : [];
+    // (an open card's own background is clear: its tile carries the card's colour then)
+    const solid = (el) => {
+      const m = el && getComputedStyle(el).backgroundColor.match(/rgba?\(([^)]+)\)/);
+      const c = m ? m[1].split(",").map((x) => Number(x)) : [];
+      return c.length >= 3 && (c[3] === undefined || c[3] > 0.5) ? c : undefined;
+    };
+    const v = solid(this.$("ha-card")) || solid(this.$(".tile")) || [];
     const dark =
-      v.length >= 3 && (v[3] === undefined || v[3] > 0.5)
+      v.length >= 3
         ? lum(v) < 0.4
         : this._hass?.themes?.darkMode ?? window.matchMedia?.("(prefers-color-scheme: dark)").matches ?? true;
     if (this.classList.contains("light") === dark) this.classList.toggle("light", !dark);
