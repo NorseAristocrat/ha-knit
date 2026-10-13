@@ -11,48 +11,68 @@
       },
       "light": {
         "title": "Light",
-        "description": "Pick the light (or a plug-controlled light's switch) and the sensors it should follow.\n\nAny on / off sensor works: motion or presence, a door or window contact (a cupboard light that's on while the door is open), a vibration sensor (a desk lamp that stays on while you're working), a doorbell (a porch light for a few minutes). Each can also be used the other way round: on while a door is closed, or while nothing is moving.",
+        "description": "Pick the light (or the switch of a plug-controlled light) and what turns it on. Any on / off sensor works: motion, a door contact, vibration.",
         "data": {
           "light": "Light or switch",
           "name": "Name",
           "presence": "Sensors that turn it on",
-          "presence_off": "Sensors that turn it on while off (inverted)",
-          "illuminance": "Light level sensors (lx)",
-          "pause": "Pause while these are on (e.g. guests)",
-          "start_on": "Turn its automatic features on now",
-          "pause_match": "Pause when",
-          "brightness_managed": "Brightness is managed by something else (for example Adaptive Lighting, or other automations)"
+          "illuminance": "Light level sensors (lx)"
         },
         "data_description": {
-          "presence": "Motion, presence, a door or window contact, vibration: it's on while any of them is on (motion, open, vibrating), and counts down once they've all cleared. Leave both lists empty for no sensor control.",
-          "presence_off": "The other way round: on while a door is closed, or while there's no motion or vibration. Leave empty if you don't need it.",
-          "illuminance": "One or more. With several, their average is used, so a room without a sensor can follow the rooms around it.",
-          "pause": "Knit leaves it alone while they're on: nothing turns it on or off by itself, and its card says Automations paused.",
-          "start_on": "Leave this off if an automation already controls it, so the two don't both act on it.",
-          "pause_match": "With several pause entities: any one of them on, or only once all of them are.",
-          "brightness_managed": "Knit still dims the light as a warning before it goes off, but never sets a brightness of its own: it turns the light on plain, and after a dim it hands the brightness back (Adaptive Lighting is asked to take over again; without it, the brightness from before the dim is put back)."
+          "presence": "It's on while any of them is on (motion, an open door, vibration), and counts down once they've all cleared.",
+          "illuminance": "It only comes on when it's dark, and goes off once it's light. With several, their average is used."
+        },
+        "sections": {
+          "advanced": {
+            "name": "Advanced options",
+            "description": "Inverted sensors, pausing, and brightness run by something else.",
+            "data": {
+              "presence_off": "Sensors that turn it on while off (inverted)",
+              "pause": "Pause while these are on (e.g. guests)",
+              "pause_match": "Pause when",
+              "brightness_managed": "Brightness is managed by something else (for example Adaptive Lighting, or other automations)",
+              "start_on": "Turn its automatic features on now"
+            },
+            "data_description": {
+              "presence_off": "The other way round: on while a door is closed, or while there's no motion or vibration.",
+              "pause": "Knit leaves it alone while they're on, and its card says Automations paused. With two or more, Configure then asks whether any or all of them pause it.",
+              "pause_match": "Any one of them on, or only once all of them are.",
+              "brightness_managed": "Knit turns the light on without setting a brightness. It still dims it as a warning before it goes off, then hands the brightness back.",
+              "start_on": "Turn this off if an automation already controls it, so the two don't both act on it."
+            }
+          }
         }
       },
       "auto_off_switch": {
         "title": "Motion-controlled device",
-        "description": "A device that should go off once nobody's around: it's never turned on for you.",
+        "description": "A device that should go off once nobody's around. It's never turned on for you.",
         "data": {
           "light": "Device",
           "name": "Name",
-          "presence": "Sensors that keep it on",
-          "presence_off": "Sensors that keep it on while off (inverted)",
-          "pause": "Pause while these are on (e.g. guests)",
-          "off_after_outage": "Off again if it comes back on after a power cut",
-          "start_on": "Turn Motion control on now",
-          "pause_match": "Pause when"
+          "presence": "Sensors that keep it on"
         },
         "data_description": {
-          "presence": "Motion, presence, a door or window contact, vibration: it goes off once they've all been clear for its timeout. They never turn it on.",
-          "presence_off": "The other way round: it stays on while a door is closed, or while there's no motion or vibration. Leave empty if you don't need it.",
-          "off_after_outage": "For a device that shouldn't come back on by itself.",
-          "pause": "Knit leaves it alone while they're on: nothing turns it on or off by itself, and its card says Automations paused.",
-          "start_on": "Leave this off if an automation already controls it, so the two don't both act on it.",
-          "pause_match": "With several pause entities: any one of them on, or only once all of them are."
+          "presence": "Motion, a door contact, vibration: it goes off once they've all been clear for its timeout."
+        },
+        "sections": {
+          "advanced": {
+            "name": "Advanced options",
+            "description": "Inverted sensors, pausing, and power cuts.",
+            "data": {
+              "presence_off": "Sensors that keep it on while off (inverted)",
+              "pause": "Pause while these are on (e.g. guests)",
+              "pause_match": "Pause when",
+              "off_after_outage": "Off again if it comes back on after a power cut",
+              "start_on": "Turn Motion control on now"
+            },
+            "data_description": {
+              "presence_off": "The other way round: it stays on while a door is closed, or while there's no motion or vibration.",
+              "pause": "Knit leaves it alone while they're on, and its card says Automations paused. With two or more, Configure then asks whether any or all of them pause it.",
+              "pause_match": "Any one of them on, or only once all of them are.",
+              "off_after_outage": "For a device that shouldn't come back on by itself.",
+              "start_on": "Turn this off if an automation already controls it, so the two don't both act on it."
+            }
+          }
         }
       }
     },
@@ -60,61 +80,77 @@
       "already_configured": "This is already a Knit device."
     },
     "error": {
-      "in_both_lists": "A sensor can only be in one of the two lists."
+      "in_both_lists": "A sensor can only be in one of the two sensor lists."
     }
   },
   "options": {
     "step": {
       "light": {
-        "title": "Sensors",
+        "title": "Light settings",
+        "description": "What turns it on. Any on / off sensor works: motion, a door contact, vibration.",
         "data": {
-          "light": "Light or switch",
-          "name": "Name",
           "presence": "Sensors that turn it on",
-          "presence_off": "Sensors that turn it on while off (inverted)",
-          "illuminance": "Light level sensors (lx)",
-          "pause": "Pause while these are on (e.g. guests)",
-          "start_on": "Turn its automatic features on now",
-          "pause_match": "Pause when",
-          "brightness_managed": "Brightness is managed by something else (for example Adaptive Lighting, or other automations)"
+          "illuminance": "Light level sensors (lx)"
         },
         "data_description": {
-          "presence": "Motion, presence, a door or window contact, vibration: it's on while any of them is on (motion, open, vibrating), and counts down once they've all cleared. Leave both lists empty for no sensor control.",
-          "presence_off": "The other way round: on while a door is closed, or while there's no motion or vibration. Leave empty if you don't need it.",
-          "illuminance": "One or more. With several, their average is used, so a room without a sensor can follow the rooms around it.",
-          "pause": "Knit leaves it alone while they're on: nothing turns it on or off by itself, and its card says Automations paused.",
-          "start_on": "Leave this off if an automation already controls it, so the two don't both act on it.",
-          "pause_match": "With several pause entities: any one of them on, or only once all of them are.",
-          "light": "What this smart device runs. Change it to move the device to another light: its settings, entities and cards stay.",
-          "brightness_managed": "Knit still dims the light as a warning before it goes off, but never sets a brightness of its own: it turns the light on plain, and after a dim it hands the brightness back (Adaptive Lighting is asked to take over again; without it, the brightness from before the dim is put back)."
+          "presence": "It's on while any of them is on (motion, an open door, vibration), and counts down once they've all cleared.",
+          "illuminance": "It only comes on when it's dark, and goes off once it's light. With several, their average is used."
+        },
+        "sections": {
+          "advanced": {
+            "name": "Advanced options",
+            "description": "Inverted sensors, pausing, and brightness run by something else.",
+            "data": {
+              "presence_off": "Sensors that turn it on while off (inverted)",
+              "pause": "Pause while these are on (e.g. guests)",
+              "pause_match": "Pause when",
+              "brightness_managed": "Brightness is managed by something else (for example Adaptive Lighting, or other automations)",
+              "light": "Move to another light or switch"
+            },
+            "data_description": {
+              "presence_off": "The other way round: on while a door is closed, or while there's no motion or vibration.",
+              "pause": "Knit leaves it alone while they're on, and its card says Automations paused. With two or more, Configure then asks whether any or all of them pause it.",
+              "pause_match": "Any one of them on, or only once all of them are.",
+              "brightness_managed": "Knit turns the light on without setting a brightness. It still dims it as a warning before it goes off, then hands the brightness back.",
+              "light": "Its settings, entities and cards move with it."
+            }
+          }
         }
       },
       "auto_off_switch": {
-        "title": "Sensors",
+        "title": "Device settings",
+        "description": "It goes off once its sensors have been clear for its timeout. It's never turned on for you.",
         "data": {
-          "light": "Device",
-          "name": "Name",
-          "presence": "Sensors that keep it on",
-          "presence_off": "Sensors that keep it on while off (inverted)",
-          "pause": "Pause while these are on (e.g. guests)",
-          "off_after_outage": "Off again if it comes back on after a power cut",
-          "start_on": "Turn Motion control on now",
-          "pause_match": "Pause when"
+          "presence": "Sensors that keep it on"
         },
         "data_description": {
-          "presence": "Motion, presence, a door or window contact, vibration: it goes off once they've all been clear for its timeout. They never turn it on.",
-          "presence_off": "The other way round: it stays on while a door is closed, or while there's no motion or vibration. Leave empty if you don't need it.",
-          "off_after_outage": "For a device that shouldn't come back on by itself.",
-          "pause": "Knit leaves it alone while they're on: nothing turns it on or off by itself, and its card says Automations paused.",
-          "start_on": "Leave this off if an automation already controls it, so the two don't both act on it.",
-          "pause_match": "With several pause entities: any one of them on, or only once all of them are.",
-          "light": "What this smart device runs. Change it to move the device to another one: its settings, entities and cards stay."
+          "presence": "Motion, a door contact, vibration: it goes off once they've all been clear for its timeout."
+        },
+        "sections": {
+          "advanced": {
+            "name": "Advanced options",
+            "description": "Inverted sensors, pausing, and power cuts.",
+            "data": {
+              "presence_off": "Sensors that keep it on while off (inverted)",
+              "pause": "Pause while these are on (e.g. guests)",
+              "pause_match": "Pause when",
+              "off_after_outage": "Off again if it comes back on after a power cut",
+              "light": "Move to another device"
+            },
+            "data_description": {
+              "presence_off": "The other way round: it stays on while a door is closed, or while there's no motion or vibration.",
+              "pause": "Knit leaves it alone while they're on, and its card says Automations paused. With two or more, Configure then asks whether any or all of them pause it.",
+              "pause_match": "Any one of them on, or only once all of them are.",
+              "off_after_outage": "For a device that shouldn't come back on by itself.",
+              "light": "Its settings, entities and cards move with it."
+            }
+          }
         }
       }
     },
     "error": {
       "already_configured": "Another Knit device already runs that one.",
-      "in_both_lists": "A sensor can only be in one of the two lists."
+      "in_both_lists": "A sensor can only be in one of the two sensor lists."
     }
   },
   "entity": {

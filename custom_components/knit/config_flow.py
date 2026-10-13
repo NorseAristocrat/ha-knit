@@ -7,6 +7,7 @@ from typing import Any
 import voluptuous as vol
 from homeassistant.config_entries import ConfigEntry, ConfigFlow, ConfigFlowResult, OptionsFlow
 from homeassistant.core import callback
+from homeassistant.data_entry_flow import section
 from homeassistant.helpers import selector
 
 from .const import (
@@ -26,6 +27,8 @@ from .const import (
 )
 
 CONF_NAME = "name"
+# the settings most devices never need, folded away in the form (they're saved beside the others)
+ADVANCED = "advanced"
 
 
 def _opt(defaults: dict, key: str):
@@ -61,24 +64,52 @@ OPTION_FIELDS = {
 }
 
 
-def _schema(kind: str, d: dict) -> dict:
-    """The sensors a kind of device follows: the same on set-up and in options."""
-    # the sensors that turn it on: while on (motion, an open door), and the inverted ones, while off
-    fields = {
-        _opt(d, CONF_PRESENCE): _ent(domain=TRIGGER_DOMAINS, multiple=True),
+def _schema(kind: str, d: dict) -> tuple[dict, dict]:
+    """What a kind of device follows, the same on set-up and in options: the everyday fields,
+    and the ones under Advanced options."""
+    # the sensors that turn it on while they're on (motion, an open door)
+    main = {_opt(d, CONF_PRESENCE): _ent(domain=TRIGGER_DOMAINS, multiple=True)}
+    if kind == TYPE_LIGHT:
+        main[_opt(d, CONF_ILLUMINANCE)] = _ent(domain="sensor", device_class="illuminance", multiple=True)
+    # the inverted ones, that turn it on while they're off
+    advanced = {
         _opt(d, CONF_PRESENCE_OFF): _ent(domain=TRIGGER_DOMAINS, multiple=True),
+        _opt(d, CONF_PAUSE): _ent(domain=["input_boolean", "binary_sensor", "switch"], multiple=True),
     }
+    # any / all only means something with several pause entities
+    if len(_list(d.get(CONF_PAUSE))) > 1:
+        advanced[vol.Optional(CONF_PAUSE_MATCH, default=d.get(CONF_PAUSE_MATCH) or "any")] = selector.SelectSelector(
+            selector.SelectSelectorConfig(options=["any", "all"], translation_key=CONF_PAUSE_MATCH, mode=selector.SelectSelectorMode.LIST)
+        )
     if kind == TYPE_LIGHT:
-        fields[_opt(d, CONF_ILLUMINANCE)] = _ent(domain="sensor", device_class="illuminance", multiple=True)
-    fields[_opt(d, CONF_PAUSE)] = _ent(domain=["input_boolean", "binary_sensor", "switch"], multiple=True)
-    fields[vol.Optional(CONF_PAUSE_MATCH, default=d.get(CONF_PAUSE_MATCH) or "any")] = selector.SelectSelector(
-        selector.SelectSelectorConfig(options=["any", "all"], translation_key=CONF_PAUSE_MATCH, mode=selector.SelectSelectorMode.LIST)
-    )
-    if kind == TYPE_LIGHT:
-        fields[vol.Optional(CONF_MANAGED, default=bool(d.get(CONF_MANAGED, False)))] = selector.BooleanSelector()
+        advanced[vol.Optional(CONF_MANAGED, default=bool(d.get(CONF_MANAGED, False)))] = selector.BooleanSelector()
     if kind == TYPE_SWITCH:
-        fields[vol.Optional(CONF_OFF_AFTER_OUTAGE, default=bool(d.get(CONF_OFF_AFTER_OUTAGE, True)))] = selector.BooleanSelector()
-    return fields
+        advanced[vol.Optional(CONF_OFF_AFTER_OUTAGE, default=bool(d.get(CONF_OFF_AFTER_OUTAGE, True)))] = selector.BooleanSelector()
+    return main, advanced
+
+
+def _list(v) -> list:
+    return [v] if isinstance(v, str) else list(v or [])
+
+
+def _advanced_used(d: dict) -> bool:
+    """Something under Advanced options is set: the form shows it open."""
+    return bool(
+        d.get(CONF_PRESENCE_OFF)
+        or d.get(CONF_PAUSE)
+        or d.get(CONF_MANAGED)
+        or d.get(CONF_OFF_AFTER_OUTAGE) is False
+        or d.get(CONF_START_ON) is False
+    )
+
+
+def _form(main: dict, advanced: dict, open_: bool) -> vol.Schema:
+    return vol.Schema({**main, vol.Required(ADVANCED): section(vol.Schema(advanced), {"collapsed": not open_})})
+
+
+def _flat(user_input: dict) -> dict:
+    """The form's values with the Advanced options beside the others, as they're saved."""
+    return {**{k: v for k, v in user_input.items() if k != ADVANCED}, **(user_input.get(ADVANCED) or {})}
 
 
 class KnitConfigFlow(ConfigFlow, domain=DOMAIN):
@@ -97,17 +128,20 @@ class KnitConfigFlow(ConfigFlow, domain=DOMAIN):
     async def _step(self, kind: str, user_input: dict[str, Any] | None) -> ConfigFlowResult:
         errors: dict = {}
         if user_input is not None:
+            user_input = _flat(user_input)
             if not _in_both(user_input):
                 return await self._create(kind, user_input[CONF_LIGHT], user_input)
-            errors[CONF_PRESENCE_OFF] = "in_both_lists"
+            # (on the form itself: an error on a field under Advanced options wouldn't show)
+            errors["base"] = "in_both_lists"
         d = user_input or {}
-        schema = {
+        main, advanced = _schema(kind, d)
+        main = {
             vol.Required(CONF_LIGHT, **({"default": d[CONF_LIGHT]} if d.get(CONF_LIGHT) else {})): _ent(domain=BASE_DOMAINS[kind]),
             _opt(d, CONF_NAME): selector.TextSelector(),
-            **_schema(kind, d),
-            vol.Optional(CONF_START_ON, default=d.get(CONF_START_ON, True)): selector.BooleanSelector(),
+            **main,
         }
-        return self.async_show_form(step_id=kind, data_schema=vol.Schema(schema), errors=errors)
+        advanced[vol.Optional(CONF_START_ON, default=d.get(CONF_START_ON, True))] = selector.BooleanSelector()
+        return self.async_show_form(step_id=kind, data_schema=_form(main, advanced, _advanced_used(d)), errors=errors)
 
     async def async_step_light(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
         return await self._step(TYPE_LIGHT, user_input)
@@ -128,10 +162,12 @@ class KnitOptionsFlow(OptionsFlow):
         current = {**entry.data, **entry.options}
         errors: dict = {}
         if user_input is not None:
+            user_input = _flat(user_input)
             # the base entity changed: the device moves to it, keeping its entities, settings and cards
-            base = user_input.get(CONF_LIGHT) or current[CONF_LIGHT]
+            base = user_input.pop(CONF_LIGHT, None) or current[CONF_LIGHT]
+            # (errors go on the form itself: one on a field under Advanced options wouldn't show)
             if _in_both(user_input):
-                errors[CONF_PRESENCE_OFF] = "in_both_lists"
+                errors["base"] = "in_both_lists"
             elif base != current[CONF_LIGHT]:
                 unique_id = f"{kind}:{base}"
                 taken = any(
@@ -139,20 +175,22 @@ class KnitOptionsFlow(OptionsFlow):
                     for e in self.hass.config_entries.async_entries(DOMAIN)
                 )
                 if taken:
-                    errors[CONF_LIGHT] = "already_configured"
+                    errors["base"] = "already_configured"
                 else:
                     self.hass.config_entries.async_update_entry(
                         entry, data={**entry.data, CONF_LIGHT: base}, unique_id=unique_id
                     )
+            # any / all isn't asked with fewer than two pause entities: it stays as it was
+            user_input.setdefault(CONF_PAUSE_MATCH, current.get(CONF_PAUSE_MATCH))
             if not errors:
                 # a field cleared in the form is left out of user_input: save it as cleared
                 return self.async_create_entry(data={k: user_input.get(k) for k in OPTION_FIELDS[kind]})
-            current = {**{k: v for k, v in current.items() if k not in OPTION_FIELDS[kind]}, **user_input}
-        schema = {
-            vol.Required(CONF_LIGHT, default=current[CONF_LIGHT]): _ent(domain=BASE_DOMAINS[kind]),
-            **_schema(kind, current),
-        }
-        return self.async_show_form(step_id=kind, data_schema=vol.Schema(schema), errors=errors)
+            current = {**{k: v for k, v in current.items() if k not in OPTION_FIELDS[kind]}, **user_input, CONF_LIGHT: base}
+        main, advanced = _schema(kind, current)
+        # moving it to another light is rare: last, under Advanced options
+        advanced[vol.Required(CONF_LIGHT, default=current[CONF_LIGHT])] = _ent(domain=BASE_DOMAINS[kind])
+        open_ = bool(errors) or _advanced_used({k: current.get(k) for k in OPTION_FIELDS[kind]})
+        return self.async_show_form(step_id=kind, data_schema=_form(main, advanced, open_), errors=errors)
 
     # the form is shown under the device kind's own step, for its own labels
     async def async_step_light(self, user_input=None):

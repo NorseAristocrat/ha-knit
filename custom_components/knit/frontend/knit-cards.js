@@ -62,9 +62,12 @@
  * Opened in a sections view, a card narrower than its section spreads its panel across the
  * whole row: the tile and the cards beside it stay where they are, and the panel opens beneath
  * them all. `wide: false` keeps it at its own width.
+ *
+ *   wide: false                              # optional: an open card keeps its panel at its own width
+ *   collapse_others: false                   # optional: opening this card leaves the others open
  */
 
-const SLC_VERSION = "40";
+const SLC_VERSION = "41";
 const PENDING_MS = 8000;
 const RING = 2 * Math.PI * 19;
 // which cards are open (and their More controls), so a redraw (as the editor does) keeps it
@@ -1735,7 +1738,56 @@ const EDITOR_CSS = `
   .grp-h b { font-weight: 500; }
   .grp-h span { font-size: 12px; color: var(--secondary-text-color); display: block; font-weight: 400; }
   .grp ha-form { display: block; margin-top: 10px; }
+  .top ha-form { display: block; }
+  details.fold { border: 1px solid var(--divider-color); border-radius: 12px; margin-top: 12px; }
+  details.fold[hidden] { display: none; }
+  details.fold > summary {
+    list-style: none; cursor: pointer; display: flex; align-items: center; gap: 10px; padding: 12px; --mdc-icon-size: 20px; user-select: none;
+  }
+  details.fold > summary::-webkit-details-marker { display: none; }
+  details.fold > summary b { flex: none; font-size: 15px; font-weight: 500; }
+  details.fold > summary span {
+    flex: 1; min-width: 0; text-align: right; font-size: 12px; color: var(--secondary-text-color);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  details.fold > summary ha-icon { flex: none; color: var(--secondary-text-color); transition: transform 0.2s; }
+  details.fold[open] > summary ha-icon { transform: rotate(180deg); }
+  details.fold > .body { padding: 0 12px 12px; }
+  .body h4 { margin: 18px 0 8px; font-size: 13px; font-weight: 500; }
+  .body > h4:first-child { margin-top: 0; }
+  .body p { margin: -4px 0 10px; font-size: 12px; color: var(--secondary-text-color); }
+  .body > p:first-child { margin-top: 0; }
+  .body ha-form { display: block; }
+  .body [data-s="helpers"] { margin-top: 12px; }
+  .body .grp:last-child { margin-bottom: 0; }
 `;
+// A group of an editor that folds away: its title, a grey line saying what's inside, and its
+// body. It starts open only when `open` (something in it is in use), then stays as it's left
+// through the editor's redraws.
+const fold = (editor, parent, key, title, summary, open) => {
+  editor._folds = editor._folds || {};
+  if (!(key in editor._folds)) editor._folds[key] = Boolean(open);
+  const el = document.createElement("details");
+  el.className = "fold";
+  el.dataset.s = key;
+  el.open = editor._folds[key];
+  el.innerHTML = `<summary><b></b><span></span><ha-icon icon="mdi:chevron-down"></ha-icon></summary><div class="body"></div>`;
+  el.querySelector("b").textContent = title;
+  el.querySelector("span").textContent = summary || "";
+  el.addEventListener("toggle", () => (editor._folds[key] = el.open));
+  parent.appendChild(el);
+  return el.querySelector(".body");
+};
+const sub = (body, title, text) => {
+  const h = document.createElement("h4");
+  h.textContent = title;
+  body.appendChild(h);
+  if (text) {
+    const para = document.createElement("p");
+    para.textContent = text;
+    body.appendChild(para);
+  }
+};
 const ATTR_OPTIONS = [
   { value: "brightness", label: "Brightness" },
   { value: "color_temp", label: "Colour temperature" },
@@ -1760,6 +1812,7 @@ const LABELS = {
   primary: "Primary colour",
   radius: "Corner radius",
   collapse_others: "Close other light cards when this one opens",
+  wide: "Spread the open panel across the whole row (in a sections view)",
   use_primary: "Use the primary colour (instead of the light's colours)",
   secondary: "Shows",
   secondary_entity: "Also show this entity's state",
@@ -1778,7 +1831,7 @@ const LABELS = {
   hint: "Hint",
   hidden: "Hide this section on the card once you've settled on the settings you want (its settings keep working after)",
   device: "Knit device",
-  entity: "Or a light without Knit",
+  entity: "Light or switch",
 };
 const HIDE = { name: "hidden", selector: { boolean: {} } };
 const GROUPS = [
@@ -1875,48 +1928,27 @@ class SmartLightCardEditor extends HTMLElement {
   }
 
   _build() {
-    if (!this._config) return;
+    // (not before hass: what folds away depends on whether the light is a Knit device)
+    if (!this._config || !this._hass) return;
     if (!this.shadowRoot) this.attachShadow({ mode: "open" });
     const c = this._config;
     const root = this.shadowRoot;
-    root.innerHTML = `<style>${EDITOR_CSS}</style>
-      <div class="sec" data-s="device"><h3>Knit device</h3><p>The light set up in the Knit integration. Its switches, settings and countdowns come with it. A light without Knit works too, but then you point the card at your own helpers below.</p></div>
-      <div class="sec" data-s="main"><h3>Main card</h3><p>The tile: its title, icon and colour (every other shade is worked out from it).</p></div>
-      <div class="sec" data-s="secondary"><h3>Secondary information</h3><p>The line under the title on the tile: what it shows, joined with a dot ("On · 35%"). A countdown, while one runs, replaces the rest ("Off in 4:12").</p></div>
-      <div class="sec" data-s="attrs"><h3>Expanded panel</h3><p>The rows under the tile when it's opened, in order.</p><div data-list></div><div class="add" data-add></div></div>
-      <div class="sec" data-s="groups"><h3>More controls</h3><p>Each needs helpers for the card to set, and automations in Home Assistant to act on them.</p></div>`;
+    const knit = Boolean(this._hass && Object.keys(found(this._hass, c.entity)).length);
+    root.innerHTML = `<style>${EDITOR_CSS}</style><div class="top"></div>`;
+    const clean = (o) => {
+      Object.keys(o).forEach((k) => (o[k] === "" || o[k] === undefined) && delete o[k]);
+      return o;
+    };
+    // another light: keep only the panel rows it can use
+    const moved = (next) => {
+      if (next.entity && next.entity !== this._config.entity) next.attributes = this._fitAttrs(next.entity);
+      this._changed(clean(next));
+      this._build();
+    };
 
-    // the Knit device (or a plain light)
-    const pick = [
+    // always shown: the Knit device, and the tile's title, icon and colour
+    const top = [
       { name: "device", selector: { device: { integration: "knit" } } },
-      { name: "entity", selector: { entity: { domain: ["light", "switch"] } } },
-    ];
-    const devData = { device: c.device || deviceOfLight(this._hass, c.entity), entity: c.device ? undefined : c.entity };
-    root.querySelector('[data-s="device"]').appendChild(
-      this._form(pick, devData, (v) => {
-        const next = { ...this._config };
-        if ((v.device || undefined) !== (devData.device || undefined)) {
-          // a Knit device picked (its light comes with it), or cleared (and its light with it)
-          delete next.device;
-          delete next.entity;
-          if (v.device) {
-            next.device = v.device;
-            next.entity = lightOfDevice(this._hass, v.device);
-          }
-        } else if ((v.entity || undefined) !== (devData.entity || undefined)) {
-          delete next.device;
-          delete next.entity;
-          if (v.entity) next.entity = v.entity;
-        } else return;
-        // keep only the panel rows the new light can use
-        if (next.entity && next.entity !== this._config.entity) next.attributes = this._fitAttrs(next.entity);
-        this._changed(next);
-        this._build();
-      })
-    );
-
-    // main card
-    const main = [
       {
         type: "grid",
         name: "",
@@ -1926,9 +1958,51 @@ class SmartLightCardEditor extends HTMLElement {
         ],
       },
       { name: "primary", selector: { color_rgb: {} } },
+    ];
+    const device = c.device || deviceOfLight(this._hass, c.entity);
+    // the colour shown is the primary, or the main shade of the named colour
+    root.querySelector(".top").appendChild(
+      this._form(top, { device, name: c.name, icon: c.icon, primary: colorsOf(c).main }, (v) => {
+        const next = { ...this._config, name: v.name, icon: v.icon, primary: v.primary };
+        // a picked primary replaces a named colour
+        if (v.primary && JSON.stringify(v.primary) !== JSON.stringify(colorsOf(this._config).main)) {
+          delete next.color;
+          delete next.colors;
+        } else if (!this._config.primary) delete next.primary;
+        if ((v.device || undefined) === (device || undefined)) return this._changed(clean(next));
+        // a Knit device picked (its light comes with it), or cleared (and its light with it)
+        delete next.device;
+        delete next.entity;
+        if (v.device) {
+          next.device = v.device;
+          next.entity = lightOfDevice(this._hass, v.device);
+        } else this._folds.advanced = true; // a light without Knit is picked under Advanced options
+        return moved(next);
+      })
+    );
+
+    // the rows under the tile when it's opened
+    const rows = fold(this, root, "attrs", "Panel rows", "", false);
+    rows.innerHTML = `<p>The controls under the tile when it's opened, in order.</p><div data-list></div><div class="add" data-add></div>`;
+
+    const adv = fold(this, root, "advanced", "Advanced options", "Look, line under the title, helpers", !knit);
+    const look = [
       { name: "radius", selector: { number: { min: 0, max: 30, step: 1, mode: "slider", unit_of_measurement: "px" } } },
       { name: "collapse_others", selector: { boolean: {} } },
+      { name: "wide", selector: { boolean: {} } },
     ];
+    adv.appendChild(
+      this._form(look, { radius: radiusOf(c), collapse_others: c.collapse_others !== false, wide: c.wide !== false }, (v) => {
+        const next = { ...this._config, radius: v.radius };
+        // on is the default for both: only false is saved
+        ["collapse_others", "wide"].forEach((k) => (v[k] ? delete next[k] : (next[k] = false)));
+        // 15px is the default: only another radius is saved
+        if (radiusOf(next) === RADIUS) delete next.radius;
+        this._changed(clean(next));
+      })
+    );
+
+    sub(adv, "Line under the title", 'What the tile shows under its title, joined with a dot ("On · 35%"). A countdown replaces the rest while it runs ("Off in 4:12").');
     const secondary = [
       {
         name: "secondary",
@@ -1945,33 +2019,31 @@ class SmartLightCardEditor extends HTMLElement {
       },
       { name: "secondary_entity", selector: { entity: {} } },
     ];
-    const secData = { secondary: ["state", "brightness", "countdown"], ...c };
-    root.querySelector('[data-s="secondary"]').appendChild(
-      this._form(secondary, secData, (v) => {
-        const next = { ...this._config, ...v };
-        Object.keys(next).forEach((k) => (next[k] === "" || next[k] === undefined) && delete next[k]);
-        this._changed(next);
+    adv.appendChild(
+      this._form(secondary, { secondary: c.secondary || ["state", "brightness", "countdown"], secondary_entity: c.secondary_entity }, (v) =>
+        this._changed(clean({ ...this._config, ...v }))
+      )
+    );
+
+    // a Knit device: its settings can be kept off the card
+    const groups = document.createElement("div");
+    groups.dataset.s = "groups";
+    adv.appendChild(groups);
+
+    sub(adv, "Light without Knit", "A light that isn't a Knit device works too: pick it here, then point the card at your own helpers. Automations in Home Assistant have to act on them.");
+    adv.appendChild(
+      this._form([{ name: "entity", selector: { entity: { domain: ["light", "switch"] } } }], { entity: c.device ? undefined : c.entity }, (v) => {
+        if ((v.entity || undefined) === (c.device ? undefined : c.entity)) return;
+        const next = { ...this._config };
+        delete next.device;
+        delete next.entity;
+        if (v.entity) next.entity = v.entity;
+        moved(next);
       })
     );
-    // the colour shown is the primary, or the main shade of the named colour
-    const data = { secondary: ["state", "brightness", "countdown"], ...c, primary: colorsOf(c).main, radius: radiusOf(c), collapse_others: c.collapse_others !== false };
-    root.querySelector('[data-s="main"]').appendChild(
-      this._form(main, data, (v) => {
-        const next = { ...this._config, ...v };
-        // a picked primary replaces a named colour
-        if (v.primary && JSON.stringify(v.primary) !== JSON.stringify(colorsOf(this._config).main)) {
-          delete next.color;
-          delete next.colors;
-        } else if (!this._config.primary) delete next.primary;
-        // on is the default: only false is saved
-        if (v.collapse_others) delete next.collapse_others;
-        else next.collapse_others = false;
-        // 15px is the default: only another radius is saved
-        if (radiusOf(next) === RADIUS) delete next.radius;
-        Object.keys(next).forEach((k) => (next[k] === "" || next[k] === undefined) && delete next[k]);
-        this._changed(next);
-      })
-    );
+    const helpers = document.createElement("div");
+    helpers.dataset.s = "helpers";
+    adv.appendChild(helpers);
 
     this._buildAttrs();
     this._buildGroups();
@@ -1992,6 +2064,9 @@ class SmartLightCardEditor extends HTMLElement {
     root.querySelector('[data-s="attrs"]').hidden = !supported.length && !entityRows;
     const list = root.querySelector("[data-list]");
     const attrs = [...(this._config.attributes || [])];
+    // folded away, it says what's in the panel
+    const named = (a) => a?.name || ATTR_OPTIONS.find((o) => o.value === attrKey(a))?.label || this._hass?.states[a?.entity]?.attributes.friendly_name || a?.entity;
+    root.querySelector('[data-s="attrs"] summary span').textContent = attrs.map(named).filter(Boolean).join(", ") || "None";
     const save = (next) => {
       this._changed({ ...this._config, attributes: next });
       this._buildAttrs();
@@ -2075,19 +2150,20 @@ class SmartLightCardEditor extends HTMLElement {
   }
 
   _buildGroups() {
-    const box = this.shadowRoot.querySelector('[data-s="groups"]');
+    const root = this.shadowRoot;
+    const box = root.querySelector('[data-s="helpers"]');
     const f = found(this._hass, this._config.entity);
     if (Object.keys(f).length) {
-      box.querySelector("p").textContent = "Set up by Knit: its switches and settings appear here by themselves. Hide a section to keep it off the card (it keeps working).";
-      [
+      // set up by Knit: its switches and settings come by themselves; a group can be kept off the card
+      const hide = root.querySelector('[data-s="groups"]');
+      const shown = [
         ["motion_control", `Hide ${triggerOf({ motion: { presence: f.occupied } }, this._hass).title.toLowerCase()} settings`, f.motion || f.auto_off],
         ["light_level", "Hide light level settings", f.light_level],
-      ].forEach(([key, label, has]) => {
-        if (!has) return;
-        const el = document.createElement("div");
-        el.className = "grp";
+      ].filter(([, , has]) => has);
+      if (shown.length) sub(hide, "Settings on the card", "A hidden group keeps working, and its countdown still shows on the tile.");
+      shown.forEach(([key, label]) => {
         const cur = this._config[key] || {};
-        el.appendChild(
+        hide.appendChild(
           this._form(
             [HIDE],
             { hidden: Boolean(cur.hidden) },
@@ -2105,7 +2181,6 @@ class SmartLightCardEditor extends HTMLElement {
             { hidden: label }
           )
         );
-        box.appendChild(el);
       });
       return;
     }
@@ -2411,14 +2486,19 @@ class SmartLightSectionEditor extends HTMLElement {
     if (!this._config || !this._hass) return;
     if (!this.shadowRoot) this.attachShadow({ mode: "open" });
     const c = this._config;
-    this.shadowRoot.innerHTML = `<style>${EDITOR_CSS}</style>
-      <div class="sec" data-s="head"><h3>Header</h3><p>Put this card at the top of a section: its title folds away the cards below it in the section (up to the next section card). The subtitle shows while it's folded away, unless it's an entity's state, which shows all the time.</p></div>
-      <div class="sec" data-s="open"><h3>Opening</h3><p>How it starts, and whether something can open it by itself.</p></div>
-      <div class="sec" data-s="button"><h3>Button</h3><p>A pill on the right. Automations run, scripts and scenes start, buttons press; anything else does the action.</p></div>`;
+    const root = this.shadowRoot;
+    root.innerHTML = `<style>${EDITOR_CSS}</style><div class="top"></div>`;
+    const b = c.button || {};
+    const t = c.expand_on || {};
+    const count = [b.entity].flat().filter(Boolean).length;
+    // always shown: the title and subtitle; the button and the rest fold away until they're used
+    const button = fold(this, root, "button", "Button", count ? b.name || `${count} ${count > 1 ? "entities" : "entity"}` : "None", count);
+    button.innerHTML = `<p>A pill on the right of the title. Automations run, scripts and scenes start, buttons press; anything else does the action.</p>`;
+    const adv = fold(this, root, "advanced", "Advanced options", "Subtitle from an entity, how it opens", c.subtitle_entity || c.collapsed_by_default || c.expand_on);
     const labels = {
       title: "Title",
-      subtitle: "Subtitle",
-      subtitle_entity: "Or an entity's state as the subtitle",
+      subtitle: "Subtitle (shown while it's folded away)",
+      subtitle_entity: "Show an entity's state as the subtitle instead (all the time)",
       collapsed_by_default: "Collapsed by default",
       expand: "Expand on trigger",
       t_entity: "Trigger entity",
@@ -2447,20 +2527,24 @@ class SmartLightSectionEditor extends HTMLElement {
       Object.keys(o).forEach((k) => (o[k] === "" || o[k] === undefined || o[k] === null || (Array.isArray(o[k]) && !o[k].length)) && delete o[k]);
       return o;
     };
-    this.shadowRoot.querySelector('[data-s="head"]').appendChild(
+    root.querySelector(".top").appendChild(
       form(
         [
           { name: "title", selector: { text: {} } },
           { name: "subtitle", selector: { text: {} } },
-          { name: "subtitle_entity", selector: { entity: {} } },
         ],
-        c,
-        (v) => this._changed(clean({ ...this._config, ...v }))
+        { title: c.title, subtitle: c.subtitle },
+        (v) => this._changed(clean({ ...this._config, title: v.title, subtitle: v.subtitle }))
+      )
+    );
+    adv.appendChild(
+      form([{ name: "subtitle_entity", selector: { entity: {} } }], { subtitle_entity: c.subtitle_entity }, (v) =>
+        this._changed(clean({ ...this._config, subtitle_entity: v.subtitle_entity }))
       )
     );
 
     // opening: collapsed by default, expand on trigger (and the trigger)
-    const t = c.expand_on || {};
+    sub(adv, "Opening", "How it starts, and whether something can open it by itself.");
     const triggerOn = Boolean(c.expand_on);
     const openSchema = [
       { name: "collapsed_by_default", selector: { boolean: {} } },
@@ -2479,7 +2563,7 @@ class SmartLightSectionEditor extends HTMLElement {
           ],
         }
       );
-    this.shadowRoot.querySelector('[data-s="open"]').appendChild(
+    adv.appendChild(
       form(
         openSchema,
         {
@@ -2505,8 +2589,7 @@ class SmartLightSectionEditor extends HTMLElement {
       )
     );
 
-    const b = c.button || {};
-    this.shadowRoot.querySelector('[data-s="button"]').appendChild(
+    button.appendChild(
       form(
         [
           { name: "entity", selector: { entity: { multiple: true } } },

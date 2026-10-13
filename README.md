@@ -64,19 +64,25 @@ features for the sensors you give it: no light sensor, no light-level settings t
 
 ![Adding a light in Knit](images/demo/setup.gif)
 
-The form asks for:
+The form asks for three things, and only the light is required:
 
 | Field | What to pick |
 |---|---|
 | Light or switch | The light, or the switch of a plug-in lamp |
 | Sensors that turn it on | Motion, presence, a door or window contact, vibration: it's on while any of them is on |
-| Sensors that turn it on while off (inverted) | The other way round: on while a door is closed, or while nothing is moving |
 | Light level sensors | One or more, averaged. Leave empty and the light ignores daylight |
-| Pause while these are on | Guest mode, a "nobody home" helper: Knit leaves the light alone meanwhile |
-| Brightness is managed by something else | Tick it for a light run by Adaptive Lighting or your own brightness automations |
 
-Only the light is required. (The recording was made before 0.9.0, when the two sensor lists were a
-single "Presence sensors" field; everything else is the same.)
+Everything else is folded away under **Advanced options**, which most lights never need:
+
+| Advanced option | What it's for |
+|---|---|
+| Sensors that turn it on while off (inverted) | The other way round: on while a door is closed, or while nothing is moving |
+| Pause while these are on | Guest mode, a "nobody home" helper: Knit leaves the light alone meanwhile. With two or more, Configure asks whether any or all of them pause it |
+| Brightness is managed by something else | Tick it for a light run by Adaptive Lighting or your own brightness automations |
+| Turn its automatic features on now | Untick it if an automation still controls the light |
+
+Advanced options opens by itself in Configure when a device uses any of them. (The recording was
+made before 0.9.2, when every field was on one page.)
 
 ### Countdown and dim
 
@@ -180,7 +186,7 @@ and will dim `01:00` mins before turning off."
 | Doorbell or button | A porch light for a few minutes after it's pressed | The sensor is only on for a moment; the timeout is the whole point |
 | Anything else | A TV's bias light, a desk lamp while the PC is on | The light outlasts a short standby instead of flicking off with it |
 
-Every sensor can also be used **the other way round**. The set-up form has two lists: *Sensors
+Every sensor can also be used **the other way round**. The set-up form has two lists (the second under Advanced options): *Sensors
 that turn it on* (while they're on: motion, an open door, vibration) and *Sensors that turn it on
 while off (inverted)*: a bathroom light that's on while the door is shut, a night light that comes
 on when the bed sensor clears, a light that's on while nothing is moving. Sensors from both lists
@@ -269,12 +275,16 @@ The numbers and switches are under Configuration on the device page as well as o
 
 ### Changing a device
 
-**Configure** on the device changes its trigger sensors (either list), light sensors and pause entities, and
-what it runs: pick another light and the device moves to it, keeping its settings, entities and
-cards. Cards set up with the device picker follow it; a card given only `entity:` needs that
-changed by hand.
+**Configure** on the device changes its sensors and light sensors, and under **Advanced options**
+its inverted sensors, pause entities and what it runs (*Move to another light*): the device moves
+to the light you pick, keeping its settings, entities and cards. Cards set up with the device
+picker follow it; a card given only `entity:` needs that changed by hand.
 
 ### The light card
+
+The visual editor shows the Knit device, the title, icon and colour. **Panel rows** (the controls
+in the open card) and **Advanced options** (corner radius, the line under the title, hiding a
+group of settings, lights without Knit) fold away beneath. The YAML underneath:
 
 ```yaml
 type: custom:knit-light-card       # a light or a motion-controlled device
@@ -306,6 +316,9 @@ Without the integration, the same card can be pointed at your own helpers (`moti
 `illuminance`, `off_after`); the editor lists them.
 
 ### The section card
+
+The visual editor shows the title and subtitle; the **Button** and **Advanced options** (a subtitle
+from an entity, how it opens) fold away beneath.
 
 Put it first in a section of a sections view. It folds the cards below it in that section, up to
 the next section card. Everything shows while the dashboard is being edited.
