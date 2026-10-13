@@ -5,24 +5,26 @@
         "title": "Add a Knit device",
         "description": "Knit your sensors into a smart device. Its settings can also be changed on its Knit card.",
         "menu_options": {
-          "light": "Light: motion control and light level",
-          "auto_off_switch": "Motion-controlled device: off once the room is empty (presence never turns it on)"
+          "light": "Light: on and off from your sensors (motion, door, vibration) and the light level",
+          "auto_off_switch": "Motion-controlled device: off once its sensors clear (they never turn it on)"
         }
       },
       "light": {
         "title": "Light",
-        "description": "Pick the light (or a plug-controlled light's switch) and the sensors it should follow.",
+        "description": "Pick the light (or a plug-controlled light's switch) and the sensors it should follow.\n\nAny on / off sensor works: motion or presence, a door or window contact (a cupboard light that's on while the door is open), a vibration sensor (a desk lamp that stays on while you're working), a doorbell (a porch light for a few minutes). Each can also be used the other way round: on while a door is closed, or while nothing is moving.",
         "data": {
           "light": "Light or switch",
           "name": "Name",
-          "presence": "Presence sensors (occupied while any is on)",
+          "presence": "Sensors that turn it on",
+          "presence_off": "Sensors that turn it on while off (inverted)",
           "illuminance": "Light level sensors (lx)",
           "pause": "Pause while these are on (e.g. guests)",
           "start_on": "Turn its automatic features on now",
           "pause_match": "Pause when"
         },
         "data_description": {
-          "presence": "Motion uses these. Leave empty for no motion control.",
+          "presence": "Motion, presence, a door or window contact, vibration: it's on while any of them is on (motion, open, vibrating), and counts down once they've all cleared. Leave both lists empty for no sensor control.",
+          "presence_off": "The other way round: on while a door is closed, or while there's no motion or vibration. Leave empty if you don't need it.",
           "illuminance": "One or more. With several, their average is used, so a room without a sensor can follow the rooms around it.",
           "pause": "Knit leaves it alone while they're on: nothing turns it on or off by itself, and its card says Automations paused.",
           "start_on": "Leave this off if an automation already controls it, so the two don't both act on it.",
@@ -31,18 +33,20 @@
       },
       "auto_off_switch": {
         "title": "Motion-controlled device",
-        "description": "A device that should go off once nobody's around.",
+        "description": "A device that should go off once nobody's around: it's never turned on for you.",
         "data": {
           "light": "Device",
           "name": "Name",
-          "presence": "Presence sensors (occupied while any is on)",
+          "presence": "Sensors that keep it on",
+          "presence_off": "Sensors that keep it on while off (inverted)",
           "pause": "Pause while these are on (e.g. guests)",
           "off_after_outage": "Off again if it comes back on after a power cut",
           "start_on": "Turn Motion control on now",
           "pause_match": "Pause when"
         },
         "data_description": {
-          "presence": "It goes off once these have all been clear for its timeout. Presence never turns it on.",
+          "presence": "Motion, presence, a door or window contact, vibration: it goes off once they've all been clear for its timeout. They never turn it on.",
+          "presence_off": "The other way round: it stays on while a door is closed, or while there's no motion or vibration. Leave empty if you don't need it.",
           "off_after_outage": "For a device that shouldn't come back on by itself.",
           "pause": "Knit leaves it alone while they're on: nothing turns it on or off by itself, and its card says Automations paused.",
           "start_on": "Leave this off if an automation already controls it, so the two don't both act on it.",
@@ -52,6 +56,9 @@
     },
     "abort": {
       "already_configured": "This is already a Knit device."
+    },
+    "error": {
+      "in_both_lists": "A sensor can only be in one of the two lists."
     }
   },
   "options": {
@@ -61,14 +68,16 @@
         "data": {
           "light": "Light or switch",
           "name": "Name",
-          "presence": "Presence sensors (occupied while any is on)",
+          "presence": "Sensors that turn it on",
+          "presence_off": "Sensors that turn it on while off (inverted)",
           "illuminance": "Light level sensors (lx)",
           "pause": "Pause while these are on (e.g. guests)",
           "start_on": "Turn its automatic features on now",
           "pause_match": "Pause when"
         },
         "data_description": {
-          "presence": "Motion uses these. Leave empty for no motion control.",
+          "presence": "Motion, presence, a door or window contact, vibration: it's on while any of them is on (motion, open, vibrating), and counts down once they've all cleared. Leave both lists empty for no sensor control.",
+          "presence_off": "The other way round: on while a door is closed, or while there's no motion or vibration. Leave empty if you don't need it.",
           "illuminance": "One or more. With several, their average is used, so a room without a sensor can follow the rooms around it.",
           "pause": "Knit leaves it alone while they're on: nothing turns it on or off by itself, and its card says Automations paused.",
           "start_on": "Leave this off if an automation already controls it, so the two don't both act on it.",
@@ -81,14 +90,16 @@
         "data": {
           "light": "Device",
           "name": "Name",
-          "presence": "Presence sensors (occupied while any is on)",
+          "presence": "Sensors that keep it on",
+          "presence_off": "Sensors that keep it on while off (inverted)",
           "pause": "Pause while these are on (e.g. guests)",
           "off_after_outage": "Off again if it comes back on after a power cut",
           "start_on": "Turn Motion control on now",
           "pause_match": "Pause when"
         },
         "data_description": {
-          "presence": "It goes off once these have all been clear for its timeout. Presence never turns it on.",
+          "presence": "Motion, presence, a door or window contact, vibration: it goes off once they've all been clear for its timeout. They never turn it on.",
+          "presence_off": "The other way round: it stays on while a door is closed, or while there's no motion or vibration. Leave empty if you don't need it.",
           "off_after_outage": "For a device that shouldn't come back on by itself.",
           "pause": "Knit leaves it alone while they're on: nothing turns it on or off by itself, and its card says Automations paused.",
           "start_on": "Leave this off if an automation already controls it, so the two don't both act on it.",
@@ -98,7 +109,8 @@
       }
     },
     "error": {
-      "already_configured": "Another Knit device already runs that one."
+      "already_configured": "Another Knit device already runs that one.",
+      "in_both_lists": "A sensor can only be in one of the two lists."
     }
   },
   "entity": {

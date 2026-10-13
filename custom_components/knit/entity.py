@@ -31,12 +31,12 @@ def kind(entry: ConfigEntry) -> str:
 def features(entry: ConfigEntry) -> tuple[bool, bool]:
     """(Motion, Light level): which features a light (or motion-controlled device) has, from its sensors.
 
-    No presence sensor: no Motion entities. No light sensor: no Light level ones. A motion-
+    No trigger sensor (either way round): no Motion entities. No light sensor: no Light level ones. A motion-
     controlled device has no light level.
     """
     conf = {**entry.data, **entry.options}
     level = bool(conf.get("illuminance")) and kind(entry) == TYPE_LIGHT
-    return bool(conf.get("presence")), level
+    return bool(conf.get("presence") or conf.get("presence_off")), level
 
 
 def expected_roles(hass, entry: ConfigEntry) -> set[str] | None:

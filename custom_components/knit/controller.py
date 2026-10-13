@@ -19,12 +19,14 @@ from .const import (
     CONF_PAUSE,
     CONF_PAUSE_MATCH,
     CONF_PRESENCE,
+    CONF_PRESENCE_OFF,
     CONF_TYPE,
     SIGNAL_UPDATE,
     TYPE_SWITCH,
 )
 from .engine import BRIGHTNESS, OFF, ON, Action, Engine
 from .entity import dimmable
+from .trigger import active, describe
 
 _LOGGER = logging.getLogger(__name__)
 NO_VALUE = (STATE_UNAVAILABLE, STATE_UNKNOWN, None)
@@ -42,6 +44,10 @@ class LightController:
         self.off_after_outage = bool(conf.get(CONF_OFF_AFTER_OUTAGE))
         presence = conf.get(CONF_PRESENCE) or []
         self.presence: list[str] = [presence] if isinstance(presence, str) else list(presence)
+        # the inverted ones: they count while off (a closed door, no motion)
+        inverted = conf.get(CONF_PRESENCE_OFF) or []
+        self.presence_off: list[str] = [inverted] if isinstance(inverted, str) else list(inverted)
+        self.triggers: list[str] = [*self.presence, *self.presence_off]
         lux = conf.get(CONF_ILLUMINANCE) or []
         # one or more light sensors (a single one in entries made before 0.3)
         self.illuminance: list[str] = [lux] if isinstance(lux, str) else list(lux)
@@ -52,7 +58,7 @@ class LightController:
         self.engine = Engine()
         # a feature with no sensor is off (and has no switch): with only a light sensor, the
         # light follows the light level (on when dark, off when light)
-        self.engine.settings.motion = bool(self.presence)
+        self.engine.settings.motion = bool(self.triggers)
         self.engine.settings.light_level = bool(self.illuminance) and not self.switch_only
         # a motion-controlled device: presence never turns it on, and it has no light level
         self.engine.settings.turn_on = not self.switch_only
@@ -77,7 +83,7 @@ class LightController:
         e.occupied = self._occupied()
         e.paused = self._paused()
         e.set_lux(self.lux(), now)
-        watch = [self.light, *self.presence, *self.illuminance]
+        watch = [self.light, *self.triggers, *self.illuminance]
         watch += self.pause
         self._unsubs.append(async_track_state_change_event(self.hass, watch, self._changed))
         self._started = True
@@ -129,7 +135,7 @@ class LightController:
                 e.set_brightness(bri)
             else:
                 out = e.set_light(on, bri, now)
-        if eid in self.presence:
+        if eid in self.triggers:
             out += e.set_occupied(self._occupied(), now)
         if eid in self.illuminance:
             out += e.set_lux(self.lux(), now)
@@ -140,11 +146,20 @@ class LightController:
     # ---- readings -----------------------------------------------------------------------
 
     def _occupied(self) -> bool | None:
-        states = [self.hass.states.get(p) for p in self.presence]
-        known = [s for s in states if s and s.state not in NO_VALUE]
-        if not known:
-            return None
-        return any(s.state == STATE_ON for s in known)
+        """Any trigger sensor active: on, or for an inverted one, off."""
+        return active([(self._reading(eid), eid in self.presence_off) for eid in self.triggers])
+
+    def _reading(self, eid: str) -> bool | None:
+        st = self.hass.states.get(eid)
+        return None if st is None or st.state in NO_VALUE else st.state == STATE_ON
+
+    def trigger(self) -> dict:
+        """The kind of its trigger sensors (motion, contact, vibration ...), for the card's wording."""
+        sensors = []
+        for eid in self.triggers:
+            st = self.hass.states.get(eid)
+            sensors.append((st.attributes.get("device_class") if st else None, eid in self.presence_off))
+        return describe(sensors)
 
     def lux(self) -> float | None:
         """The average of the light sensors that have a reading (None when none do)."""

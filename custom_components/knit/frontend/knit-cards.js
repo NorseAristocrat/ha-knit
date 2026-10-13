@@ -7,7 +7,9 @@
  * tiles dragged sideways like the main one), then a More controls row with up to two groups:
  *
  *   Motion control  the room's presence (Occupied, Empty · 3mins ago), how long it is empty
- *                before the light goes off, and how much of that it spends dimmed first (On / Off)
+ *                before the light goes off, and how much of that it spends dimmed first (On / Off).
+ *                Named and worded for the sensor: Door control (Open, Closed · 3mins ago) for a
+ *                contact, Vibration control, or Sensor control for anything else or a mix
  *   Light level  Dark below / Light above (lx) and Off when light after (On / Off)
  *
  * Times are mm:ss (in a box styled as the heating schedule's From / To) and are saved in the helper's own unit (s, min, h,
@@ -33,7 +35,8 @@
  *     - effect
  *     - { entity: sensor.lamp_power, name: Power, icon: mdi:flash }
  *   motion:
- *     presence: binary_sensor.x_occupied     # shown in Motion control
+ *     presence: binary_sensor.x_occupied     # what turns it on: motion, a door contact, vibration ...
+ *     inverted: true                         # optional: it counts while the sensor is off (a closed door)
  *     enabled: input_boolean.x_motion        # optional: no button on the card; greys Motion control while off
  *   motion_control:                          # (auto_off: in older configs is read the same)
  *     enabled: input_boolean.x_auto_off
@@ -61,7 +64,7 @@
  * them all. `wide: false` keeps it at its own width.
  */
 
-const SLC_VERSION = "39";
+const SLC_VERSION = "40";
 const PENDING_MS = 8000;
 const RING = 2 * Math.PI * 19;
 // which cards are open (and their More controls), so a redraw (as the editor does) keeps it
@@ -277,6 +280,73 @@ const deviceOfLight = (hass, light) => {
   }
   return undefined;
 };
+// ---- what turns the light on -------------------------------------------------------------
+// A Knit device's Occupied sensor says what kind its trigger sensors are (`trigger`: motion,
+// contact, vibration, sensor; `noun` for a contact; `inverted`: they count while off). Without
+// the integration it's read from the presence sensor's device class (and `motion.inverted`).
+const TRIGGER_KINDS = {
+  motion: "motion", occupancy: "motion", presence: "motion",
+  door: "contact", window: "contact", garage_door: "contact", opening: "contact",
+  vibration: "vibration", moving: "vibration",
+};
+const CONTACT_NOUNS = { door: "door", window: "window", garage_door: "garage door" };
+// the words for a kind: the group's title, the countdown's label, the status while active /
+// clear, and the sentence's parts (`lead` [time] mins `after`; `sw*` for a motion-controlled
+// device, which is never turned on; `dark` starts the Light level sentence)
+const triggerWords = (kind, inverted, noun = "door") => {
+  const Noun = noun[0].toUpperCase() + noun.slice(1);
+  if (kind === "contact")
+    return {
+      title: `${Noun} control`, short: Noun, on: inverted ? "Closed" : "Open", off: inverted ? "Open" : "Closed",
+      lead: `${inverted ? "Closing" : "Opening"} the ${noun} turns the light on, it goes off `,
+      after: inverted ? " after it opens" : " after it closes",
+      ignored: `The ${noun} is ignored. When on, it goes off `,
+      sw: "It goes off ", swAfter: ` after the ${noun} ${inverted ? "opens" : "closes"}`,
+      dark: `${inverted ? "Closing" : "Opening"} the ${noun} only turns the light on when darker than `,
+    };
+  if (kind === "vibration")
+    return {
+      title: "Vibration control", short: "Vibration", on: inverted ? "Still" : "Vibration", off: inverted ? "Vibration" : "Still",
+      lead: inverted ? "The light is on while there's no vibration, and goes off " : "Vibration turns the light on, it goes off ",
+      after: inverted ? " after vibration starts" : " after it stops",
+      ignored: "Vibration is ignored. When on, it goes off ",
+      sw: "It goes off ", swAfter: inverted ? " after vibration starts" : " after the vibration stops",
+      dark: inverted ? "With no vibration, the light only turns on when darker than " : "Vibration only turns the light on when darker than ",
+    };
+  if (kind === "sensor")
+    return {
+      title: "Sensor control", short: "Sensor", on: "Active", off: "Clear",
+      lead: inverted ? "The light is on while its sensors are off, and goes off " : "Its sensors turn the light on, it goes off ",
+      after: inverted ? " after one turns on" : " after the last one clears",
+      ignored: "Its sensors are ignored. When on, it goes off ",
+      sw: "It goes off ", swAfter: inverted ? " after one of its sensors turns on" : " after its sensors clear",
+      dark: "Its sensors only turn the light on when darker than ",
+    };
+  if (inverted)
+    return {
+      title: "Motion control", short: "Motion", on: "No motion", off: "Motion",
+      lead: "The light is on while there's no motion, and goes off ", after: " after motion is detected",
+      ignored: "Motion is ignored. When on, it goes off ",
+      sw: "It goes off ", swAfter: " after motion is detected",
+      dark: "With no motion, the light only turns on when darker than ",
+    };
+  return {
+    title: "Motion control", short: "Motion", on: "Occupied", off: "Empty",
+    lead: "Motion detected turns the light on, it goes off after ", after: "",
+    ignored: "Motion is ignored. When on, it goes off after ",
+    sw: "It goes off once the room has been empty for ", swAfter: "",
+    dark: "Motion only turns the light on when darker than ",
+  };
+};
+// the words for a card's config, from its presence sensor as it is now
+const triggerOf = (c, hass) => {
+  const m = c?.motion || {};
+  const a = hass?.states?.[m.presence]?.attributes || {};
+  const kind = m.trigger || a.trigger || TRIGGER_KINDS[a.device_class] || "motion";
+  const inverted = Boolean(m.inverted ?? a.inverted);
+  return triggerWords(kind, inverted, a.noun || CONTACT_NOUNS[a.device_class] || "door");
+};
+
 // `auto_off` is the Motion control group's old key: read as `motion_control`
 const renamed = (config) => {
   if (!config || config.auto_off === undefined) return config;
@@ -951,7 +1021,7 @@ class SmartLightCard extends HTMLElement {
 
   // row 1: icon + title | state + On / Off (the grid's two cells)
   _groupHead(g, icon, label, sw) {
-    return `<div class="title"><ha-icon icon="${icon}"></ha-icon><span>${esc(label)}</span></div><div class="end"><span class="val" data-gv="${g}"></span>${
+    return `<div class="title"><ha-icon icon="${icon}"></ha-icon><span data-gt="${g}">${esc(label)}</span></div><div class="end"><span class="val" data-gv="${g}"></span>${
       sw ? `<button class="offb" data-gsw="${g}" role="switch" aria-label="${esc(label)}"></button>` : ""
     }</div>`;
   }
@@ -981,7 +1051,7 @@ class SmartLightCard extends HTMLElement {
     if (!x) return "";
     // a light that can't be dimmed (a switch, an on / off light) has no dim before off
     const inputs = [x.duration && this._tinHtml("auto", "Off after"), this._hasDim() && this._tinHtml("dim", "Dim before off")].filter(Boolean);
-    return `<div class="grp" data-g="auto">${this._groupHead("auto", "mdi:timer-outline", "Motion control", x.enabled)}${
+    return `<div class="grp" data-g="auto">${this._groupHead("auto", "mdi:timer-outline", triggerOf(this._config, this._hass).title, x.enabled)}${
       inputs.length ? this._sentHtml("auto", inputs) : ""
     }${x.hint ? `<div class="note">${esc(x.hint)}</div>` : ""}</div>`;
   }
@@ -1003,7 +1073,7 @@ class SmartLightCard extends HTMLElement {
   }
 
   // the Light level sentence for the switches' state, with only the values it has
-  _levelTokens(lvlOn, motionCtl, has) {
+  _levelTokens(lvlOn, motionCtl, has, words) {
     const D = 0, A = 1, T = 2; // the inputs, as tokens (numbers)
     const tail = (start, light, lightFor) => {
       if (has.above && has.after) return [start, D, light, A, " for ", T, " mins."];
@@ -1019,7 +1089,7 @@ class SmartLightCard extends HTMLElement {
       return [...t, "."];
     }
     return motionCtl
-      ? tail("Motion only turns the light on when darker than ", ", and it goes off when lighter than ", ", and it goes off once it has been light for ")
+      ? tail(words.dark, ", and it goes off when lighter than ", ", and it goes off once it has been light for ")
       : tail("Turns the light on when darker than ", ", and off when lighter than ", ", and off once it has been light for ");
   }
 
@@ -1345,7 +1415,7 @@ class SmartLightCard extends HTMLElement {
       const left = secsLeft(t);
       if (left !== undefined) out.push({ label, left, total: durationSecs(t.attributes.duration), auto });
     };
-    if (c.motion_control?.timer) add(c.motion_control.timer, "Motion", true);
+    if (c.motion_control?.timer) add(c.motion_control.timer, triggerOf(c, this._hass).short, true);
     if (c.light_level?.timer && (!c.light_level.enabled || this._isOnId(c.light_level.enabled))) add(c.light_level.timer, "Light", false);
     // timers: other countdowns; entities: [..] is one countdown that ends when the last does
     (c.timers || []).forEach((x) => {
@@ -1538,9 +1608,15 @@ class SmartLightCard extends HTMLElement {
     // Motion: no section of its own; its switch (if any) still greys Motion control while off
     const motionOn = !c.motion?.enabled || this._isOnId(c.motion.enabled);
 
-    // Motion control
+    // Motion control (Door control, Vibration control ...: worded for what turns the light on)
     const x = c.motion_control;
+    const words = triggerOf(c, this._hass);
     if (x) {
+      const head = this.$('[data-gt="auto"]');
+      if (head && head.textContent !== words.title) {
+        head.textContent = words.title;
+        this.$('[data-gsw="auto"]')?.setAttribute("aria-label", words.title);
+      }
       const autoOn = !x.enabled || this._isOnId(x.enabled);
       const live = autoOn && motionOn;
       setSw("auto", x.enabled, !motionOn);
@@ -1548,10 +1624,13 @@ class SmartLightCard extends HTMLElement {
       g?.classList.toggle("off", !live);
       g?.classList.toggle("blocked", !motionOn);
       const left = on ? secsLeft(this._st(x.timer)) : undefined;
-      // the room first ("Occupied", "Empty · 3mins ago"), then the countdown while it runs
+      // the sensor first ("Occupied", "Empty · 3mins ago"; "Open", "Closed · 3mins ago"), then the
+      // countdown while it runs. (A Knit device's Occupied sensor is already on while active; a
+      // sensor of your own with `inverted: true` is active while off.)
       const p = this._st(c.motion?.presence);
-      const room = !p || NO_VALUE.includes(p.state) ? "" : p.state === "on" ? "Occupied" : "Empty";
-      const status = !motionOn ? "Motion off" : live && left !== undefined ? `Off in ${clock(left)}` : room === "Empty" ? ago(p.last_changed) : "";
+      const active = p && (p.state === "on") !== Boolean(c.motion?.inverted);
+      const room = !p || NO_VALUE.includes(p.state) ? "" : active ? words.on : words.off;
+      const status = !motionOn ? `${words.short} off` : live && left !== undefined ? `Off in ${clock(left)}` : room === words.off ? ago(p.last_changed) : "";
       val("auto", [room, status].filter(Boolean).join(" · "));
       this._renderTin("auto", !live);
       this._renderTin("dim", !live);
@@ -1559,8 +1638,8 @@ class SmartLightCard extends HTMLElement {
       this._sentence(
         "auto",
         x.switch_only
-          ? [live ? "It goes off once the room has been empty for " : "Motion control is off. When on, it goes off once the room has been empty for ", 0, " mins", ...dim]
-          : [live ? "Motion detected turns the light on, it goes off after " : "Motion is ignored. When on, it goes off after ", 0, " mins", ...dim]
+          ? [live ? words.sw : `${words.title} is off. When on, it ${words.sw.slice(3)}`, 0, ` mins${words.swAfter}`, ...dim]
+          : [live ? words.lead : words.ignored, 0, ` mins${words.after}`, ...dim]
       );
     }
     // Motion control on: presence turns the light on (Light level decides when)
@@ -1584,10 +1663,15 @@ class SmartLightCard extends HTMLElement {
       const ro = Boolean(this.$("[data-ro]"));
       this._sentence(
         "level",
-        this._levelTokens(lvlOn, motionCtl, {
-          above: ro || Boolean(this.$('[data-lvl="above"]')),
-          after: Boolean(this.$('[data-tin="after"]')),
-        })
+        this._levelTokens(
+          lvlOn,
+          motionCtl,
+          {
+            above: ro || Boolean(this.$('[data-lvl="above"]')),
+            after: Boolean(this.$('[data-tin="after"]')),
+          },
+          words
+        )
       );
       // a threshold helper as the dark sensor: dark below lower - hysteresis, light above lower + hysteresis
       if (ro) {
@@ -1681,7 +1765,8 @@ const LABELS = {
   secondary_entity: "Also show this entity's state",
   type: "Row",
   enabled: "On / Off switch (input_boolean)",
-  presence: "Presence / occupancy sensor",
+  presence: "Sensor that turns it on (motion, a door, vibration)",
+  inverted: "Inverted: it counts while the sensor is off (a closed door, no motion)",
   duration: "Motion timeout (input_number, s or min)",
   timer: "Countdown timer",
   dim: "Dim before off (input_number, s or %)",
@@ -1699,10 +1784,11 @@ const HIDE = { name: "hidden", selector: { boolean: {} } };
 const GROUPS = [
   {
     key: "motion",
-    title: "Presence",
-    desc: "The room's presence sensor, shown in Motion control (Occupied, Empty · 3mins ago).",
+    title: "Sensor",
+    desc: "What turns the light on: a motion or presence sensor, a door contact, a vibration sensor. The card words itself to match (Occupied, Empty · 3mins ago; Open, Closed · 3mins ago).",
     schema: [
-      { name: "presence", selector: { entity: { domain: "binary_sensor" } } },
+      { name: "presence", selector: { entity: { domain: ["binary_sensor", "input_boolean"] } } },
+      { name: "inverted", selector: { boolean: {} } },
       { name: "enabled", selector: { entity: { domain: "input_boolean" } } },
     ],
   },
@@ -1994,7 +2080,7 @@ class SmartLightCardEditor extends HTMLElement {
     if (Object.keys(f).length) {
       box.querySelector("p").textContent = "Set up by Knit: its switches and settings appear here by themselves. Hide a section to keep it off the card (it keeps working).";
       [
-        ["motion_control", "Hide motion control settings", f.motion || f.auto_off],
+        ["motion_control", `Hide ${triggerOf({ motion: { presence: f.occupied } }, this._hass).title.toLowerCase()} settings`, f.motion || f.auto_off],
         ["light_level", "Hide light level settings", f.light_level],
       ].forEach(([key, label, has]) => {
         if (!has) return;

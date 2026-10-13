@@ -1,4 +1,4 @@
-"""Occupied (any of the presence sensors) and Dark (as the light level settings judge it)."""
+"""Occupied (any of the trigger sensors active) and Dark (as the light level settings judge it)."""
 
 from __future__ import annotations
 
@@ -31,7 +31,8 @@ class Occupied(LiveEntity, BinarySensorEntity):
 
     @property
     def extra_state_attributes(self) -> dict:
-        return {**super().extra_state_attributes, "sources": self.controller.presence}
+        # what kind of sensors they are (motion, a door contact, vibration), for the card's wording
+        return {**super().extra_state_attributes, "sources": self.controller.triggers, **self.controller.trigger()}
 
 
 class Dark(LiveEntity, BinarySensorEntity):
