@@ -10,7 +10,8 @@ TYPE_APPLIANCE = "appliance"  # a dishwasher, a washing machine: status from pow
 
 # config entry data / options
 CONF_LIGHT = "light"  # lights and motion-controlled devices: the light / switch it runs
-CONF_PRESENCE = "presence"  # one or more binary sensors: occupied while any is on
+CONF_PRESENCE = "presence"  # one or more trigger sensors (motion, a door, vibration): occupied while any is on
+CONF_PRESENCE_OFF = "presence_off"  # trigger sensors the other way round: occupied while any is off
 CONF_ILLUMINANCE = "illuminance"  # one or more light level sensors (lx): their average is judged
 CONF_PAUSE = "pause"  # while these entities are on (any / all of them), nothing happens (e.g. guests)
 CONF_PAUSE_MATCH = "pause_match"  # "any" (default) or "all" of the pause entities

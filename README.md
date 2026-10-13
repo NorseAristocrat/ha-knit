@@ -6,8 +6,8 @@
 
 **Lights that look after themselves, without writing a single automation.**
 
-Knit is a Home Assistant integration that knits the sensors you already have (presence, light
-level) to the lights you already have, and gives each one a dashboard card. Tell it which light,
+Knit is a Home Assistant integration that knits the sensors you already have (motion, door
+contacts, vibration, light level) to the lights you already have, and gives each one a dashboard card. Tell it which light,
 which sensors, and it does the rest: on when someone walks in and it's dark, a countdown once the
 room is empty, a gentle dim as a warning, then off.
 
@@ -20,6 +20,8 @@ room is empty, a gentle dim as a warning, then off.
 
 - **Rooms that light themselves.** Walk in, the light comes on (only if it's dark). Walk out, it
   goes off a few minutes later.
+- **Cupboards, sheds and desks.** A door contact lights a cupboard while it's open; a vibration
+  sensor keeps a desk lamp on while you're working.
 - **No more lights left on.** Everything Knit turns on, it also turns off, with a countdown you can
   see on the card.
 - **No surprises.** Before a light goes off it dims to half for the last part of the countdown.
@@ -44,6 +46,8 @@ living in it rather than by editing YAML.
 - Everything it knows is an entity: the settings (numbers and switches), whether the room counts
   as occupied or dark, the averaged light level, and when each countdown ends. Use them in your
   own automations, scripts and dashboards.
+- Any on / off sensor can be a trigger, either way round (on while a door is closed, on while
+  nothing moves), and several count as one.
 - Several presence sensors count as one room; several light sensors are averaged, so a room with
   no sensor of its own can follow the rooms around it.
 - A **pause** list (guest mode, a "nobody home" helper, a cinema scene) stands Knit down for a
@@ -58,7 +62,7 @@ living in it rather than by editing YAML.
 ### Sets a room up in one form
 
 Settings → Devices & services → Add integration → **Knit**, once per light. Pick the light (or
-the switch of a plug-in lamp), the presence sensors and the light sensors. A light only gets the
+the switch of a plug-in lamp), the sensors that turn it on and the light sensors. A light only gets the
 features for the sensors you give it: no light sensor, no light-level settings to get wrong.
 
 ![Adding a light in Knit](images/demo/setup.gif)
@@ -147,6 +151,28 @@ where things are now.
 
 ![A paused light](images/demo/pause.gif)
 
+### Doors, vibration and other sensors
+
+Motion is only one way to say "someone's here". Anything that is on or off can turn a light on, and
+the same countdown and dim follow once it clears. The card names and words itself for the sensor:
+**Door control**, "Opening the door turns the light on, it goes off `05:00` mins after it closes,
+and will dim `01:00` mins before turning off."
+
+| Sensor | Good for | Why the countdown and dim help |
+|---|---|---|
+| Door or window contact | A cupboard, wardrobe, pantry or shed: on while the door is open | A short timeout covers a door pushed to; the dim shows it's about to go off |
+| Front or garage door | The hallway light when you come in (Light level keeps it for after dark) | A 5 minute timeout gives you time to take your coat off |
+| Vibration sensor | A desk, workbench or armchair: on while there's movement | The timeout bridges the still moments; the dim is the nudge to move |
+| Bed or chair pressure sensor | A reading lamp that's on while you're sat there | The lamp fades out a little after you get up, not the moment you lean forward |
+| Doorbell or button | A porch light for a few minutes after it's pressed | The sensor is only on for a moment; the timeout is the whole point |
+| Anything else | A TV's bias light, a desk lamp while the PC is on | A threshold or template helper turns any reading into on / off |
+
+Every sensor can also be used **the other way round**. The set-up form has two lists: *Sensors
+that turn it on* (while they're on: motion, an open door, vibration) and *Sensors that turn it on
+while off (inverted)*: a bathroom light that's on while the door is shut, a night light that comes
+on when the bed sensor clears, a light that's on while nothing is moving. Sensors from both lists
+can share a light: it's on while any of them says so, and counts down once none does.
+
 ### Motion-controlled devices
 
 For something that should go off when the room empties but must never be switched on for you: a
@@ -192,7 +218,7 @@ the two never both act on it.
 
 ## Quick start
 
-1. Add a light in Knit with a presence sensor (and a light sensor if you have one).
+1. Add a light in Knit with a motion sensor or a door contact (and a light sensor if you have one).
 2. Edit a dashboard, add a card, and search for **Knit Light Card**. Pick the Knit device.
 3. Leave the room. Watch the ring.
 4. Open the card → More controls, and set the times to suit the room.
@@ -206,14 +232,14 @@ A device only has the entities for the sensors it was given.
 
 | Entity | What it is | Default |
 |---|---|---|
-| `switch.…_motion` | Motion control on / off | on |
-| `number.…_motion_timeout` | Seconds the room is empty before the light goes off | 300 |
+| `switch.…_motion` | Motion control (Door control, Vibration control ...) on / off | on |
+| `number.…_motion_timeout` | Seconds after its sensors clear before the light goes off | 300 |
 | `number.…_dim_before_off` | Seconds of that spent dimmed to half (at most 75% of the timeout) | 60 |
 | `switch.…_light_level` | Light level on / off | on |
 | `number.…_dark_below` | Dark below this many lx | 10 |
 | `number.…_light_above` | Light above this many lx | 15 |
 | `number.…_off_when_light_after` | Seconds of light before the light goes off | 300 |
-| `binary_sensor.…_occupied` | Any of its presence sensors on | |
+| `binary_sensor.…_occupied` | Any of its trigger sensors active (on, or off for an inverted one); attributes `trigger`, `inverted` | |
 | `binary_sensor.…_dark` | Dark, as its light level settings judge it | |
 | `sensor.…_light_level` | The average of its light sensors (lx) | |
 | `sensor.…_auto_off_ends` | When the motion timeout ends (a timestamp) | |
@@ -224,7 +250,7 @@ The numbers and switches are under Configuration on the device page as well as o
 
 ### Changing a device
 
-**Configure** on the device changes its presence sensors, light sensors and pause entities, and
+**Configure** on the device changes its trigger sensors (either list), light sensors and pause entities, and
 what it runs: pick another light and the device moves to it, keeping its settings, entities and
 cards. Cards set up with the device picker follow it; a card given only `entity:` needs that
 changed by hand.
@@ -255,7 +281,8 @@ collapse_others: true              # opening this card closes the other Knit car
 wide: true                         # false: never spread across the row when open
 ```
 
-Without the integration, the same card can be pointed at your own helpers (`motion_control:` and
+Without the integration, the same card can be pointed at your own helpers (`motion:` takes
+`presence`, the sensor that turns it on, and `inverted: true` if it counts while off; `motion_control:` and
 `light_level:` take `enabled`, `duration`, `timer`, `dim`, `dark_below`, `light_above`,
 `illuminance`, `off_after`); the editor lists them.
 

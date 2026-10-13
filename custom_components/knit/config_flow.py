@@ -19,6 +19,7 @@ from .const import (
     CONF_PAUSE_MATCH,
     CONF_POWER,
     CONF_PRESENCE,
+    CONF_PRESENCE_OFF,
     CONF_START_ON,
     CONF_TYPE,
     DOMAIN,
@@ -33,13 +34,21 @@ CONF_NAME = "name"
 def _opt(defaults: dict, key: str):
     v = defaults.get(key)
     # one entity (entries made before several could be picked): shown as a list now
-    if key in (CONF_ILLUMINANCE, CONF_PAUSE) and isinstance(v, str):
+    if key in (CONF_PRESENCE, CONF_PRESENCE_OFF, CONF_ILLUMINANCE, CONF_PAUSE) and isinstance(v, str):
         v = [v]
     return vol.Optional(key, description={"suggested_value": v} if v not in (None, "", []) else None)
 
 
 def _ent(**kw):
     return selector.EntitySelector(selector.EntitySelectorConfig(**kw))
+
+
+TRIGGER_DOMAINS = ["binary_sensor", "input_boolean"]
+
+
+def _in_both(user_input: dict) -> bool:
+    """A sensor picked both ways round: it would always count as active."""
+    return bool(set(user_input.get(CONF_PRESENCE) or []) & set(user_input.get(CONF_PRESENCE_OFF) or []))
 
 
 # what each kind of device can be built around (its base entity)
@@ -50,8 +59,8 @@ BASE_DOMAINS = {
 
 # the fields each kind of device can change later (options), besides its base entity
 OPTION_FIELDS = {
-    TYPE_LIGHT: (CONF_PRESENCE, CONF_ILLUMINANCE, CONF_PAUSE, CONF_PAUSE_MATCH),
-    TYPE_SWITCH: (CONF_PRESENCE, CONF_PAUSE, CONF_PAUSE_MATCH, CONF_OFF_AFTER_OUTAGE),
+    TYPE_LIGHT: (CONF_PRESENCE, CONF_PRESENCE_OFF, CONF_ILLUMINANCE, CONF_PAUSE, CONF_PAUSE_MATCH),
+    TYPE_SWITCH: (CONF_PRESENCE, CONF_PRESENCE_OFF, CONF_PAUSE, CONF_PAUSE_MATCH, CONF_OFF_AFTER_OUTAGE),
     TYPE_APPLIANCE: (CONF_DOOR, *CONF_STATUS_NAMES.values()),
 }
 
@@ -70,7 +79,11 @@ def _schema(kind: str, d: dict) -> dict:
         for status, key in CONF_STATUS_NAMES.items():
             fields[vol.Optional(key, description={"suggested_value": d.get(key) or status})] = selector.TextSelector()
         return fields
-    fields = {_opt(d, CONF_PRESENCE): _ent(domain="binary_sensor", multiple=True)}
+    # the sensors that turn it on: while on (motion, an open door), and the inverted ones, while off
+    fields = {
+        _opt(d, CONF_PRESENCE): _ent(domain=TRIGGER_DOMAINS, multiple=True),
+        _opt(d, CONF_PRESENCE_OFF): _ent(domain=TRIGGER_DOMAINS, multiple=True),
+    }
     if kind == TYPE_LIGHT:
         fields[_opt(d, CONF_ILLUMINANCE)] = _ent(domain="sensor", device_class="illuminance", multiple=True)
     fields[_opt(d, CONF_PAUSE)] = _ent(domain=["input_boolean", "binary_sensor", "switch"], multiple=True)
@@ -95,27 +108,26 @@ class KnitConfigFlow(ConfigFlow, domain=DOMAIN):
         name = user_input.pop(CONF_NAME, None) or (st and st.attributes.get("friendly_name")) or main
         return self.async_create_entry(title=name, data={CONF_TYPE: kind, **user_input})
 
-    async def async_step_light(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
+    async def _step(self, kind: str, user_input: dict[str, Any] | None) -> ConfigFlowResult:
+        errors: dict = {}
         if user_input is not None:
-            return await self._create(TYPE_LIGHT, user_input[CONF_LIGHT], user_input)
+            if not _in_both(user_input):
+                return await self._create(kind, user_input[CONF_LIGHT], user_input)
+            errors[CONF_PRESENCE_OFF] = "in_both_lists"
+        d = user_input or {}
         schema = {
-            vol.Required(CONF_LIGHT): _ent(domain=BASE_DOMAINS[TYPE_LIGHT]),
-            vol.Optional(CONF_NAME): selector.TextSelector(),
-            **_schema(TYPE_LIGHT, {}),
-            vol.Optional(CONF_START_ON, default=True): selector.BooleanSelector(),
+            vol.Required(CONF_LIGHT, **({"default": d[CONF_LIGHT]} if d.get(CONF_LIGHT) else {})): _ent(domain=BASE_DOMAINS[kind]),
+            _opt(d, CONF_NAME): selector.TextSelector(),
+            **_schema(kind, d),
+            vol.Optional(CONF_START_ON, default=d.get(CONF_START_ON, True)): selector.BooleanSelector(),
         }
-        return self.async_show_form(step_id="light", data_schema=vol.Schema(schema))
+        return self.async_show_form(step_id=kind, data_schema=vol.Schema(schema), errors=errors)
+
+    async def async_step_light(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
+        return await self._step(TYPE_LIGHT, user_input)
 
     async def async_step_auto_off_switch(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
-        if user_input is not None:
-            return await self._create(TYPE_SWITCH, user_input[CONF_LIGHT], user_input)
-        schema = {
-            vol.Required(CONF_LIGHT): _ent(domain=BASE_DOMAINS[TYPE_SWITCH]),
-            vol.Optional(CONF_NAME): selector.TextSelector(),
-            **_schema(TYPE_SWITCH, {}),
-            vol.Optional(CONF_START_ON, default=True): selector.BooleanSelector(),
-        }
-        return self.async_show_form(step_id="auto_off_switch", data_schema=vol.Schema(schema))
+        return await self._step(TYPE_SWITCH, user_input)
 
     async def async_step_appliance(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
         errors: dict = {}
@@ -149,6 +161,8 @@ class KnitOptionsFlow(OptionsFlow):
             base = user_input.get(key) or current[key]
             if kind == TYPE_APPLIANCE and _names_clash(user_input):
                 errors["base"] = "same_names"
+            elif _in_both(user_input):
+                errors[CONF_PRESENCE_OFF] = "in_both_lists"
             elif base != current[key]:
                 # the base entity changed: the device moves to it, keeping its entities, settings and cards
                 unique_id = f"{kind}:{base}"
@@ -165,7 +179,7 @@ class KnitOptionsFlow(OptionsFlow):
             if not errors:
                 # a field cleared in the form is left out of user_input: save it as cleared
                 return self.async_create_entry(data={k: user_input.get(k) for k in OPTION_FIELDS[kind]})
-            current = {**current, **user_input}
+            current = {**{k: v for k, v in current.items() if k not in OPTION_FIELDS[kind]}, **user_input}
         base_selector = _ent(domain="sensor", device_class="power") if kind == TYPE_APPLIANCE else _ent(domain=BASE_DOMAINS[kind])
         schema = {vol.Required(key, default=current[key]): base_selector, **_schema(kind, current)}
         return self.async_show_form(step_id=kind, data_schema=vol.Schema(schema), errors=errors)
