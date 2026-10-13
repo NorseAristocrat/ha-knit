@@ -22,8 +22,7 @@ Everything else is folded away under **Advanced options**, which most lights nev
 | Brightness is managed by something else | Tick it for a light run by Adaptive Lighting or your own brightness automations |
 | Turn its automatic features on now | Untick it if an automation still controls the light |
 
-Advanced options opens by itself in Configure when a device uses any of them. (The recording was
-made before 0.9.2, when every field was on one page.)
+Advanced options opens by itself in Configure when a device uses any of them.
 
 Already have an automation running the light? Untick "Turn its automatic features on now" when you
 add it, switch your automation off, then turn Knit's Motion control and Light level on, so the two
