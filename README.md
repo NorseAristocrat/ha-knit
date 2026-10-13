@@ -28,7 +28,7 @@ countdown once the room is empty, a gentle dim as a warning, then off.
   Move, and it comes straight back to where it was.
 - **Daylight.** A light that's on when the room gets bright switches itself off; a lamp that
   follows the light level alone comes on at dusk.
-- **Things that should never be left on.** A heater, a fan or a decorative light on a smart plug
+- **Things that should never be left on.** A fan, a decorative light or a TV on a smart plug
   can be set to go off once nobody's around, without ever being turned on for you.
 - **A tidy dashboard.** Cards that open in place to show the controls, and section headers that
   fold a whole group of cards away until you need them.
@@ -69,7 +69,7 @@ warning, then goes off.
 It's on while the door is open and goes off a few minutes after it closes. A cupboard wants a
 shorter wait than a room: set it on the card (step below).
 
-### A heater or fan that's never left on
+### A fan that's never left on
 
 1. Add integration → Knit → **Motion-controlled device**.
 2. **Device**: its smart plug or switch.
