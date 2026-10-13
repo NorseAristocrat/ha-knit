@@ -8,8 +8,8 @@
 
 Knit is a Home Assistant integration that knits the sensors you already have (motion, door
 contacts, vibration, light level) to the lights you already have, and gives each one a dashboard card. Tell it which light,
-which sensors, and it does the rest: on when someone walks in and it's dark, a countdown once the
-room is empty, a gentle dim as a warning, then off.
+which sensors, and it does the rest: on when someone walks in (or a door opens) and it's dark, a
+countdown once the room is empty, a gentle dim as a warning, then off.
 
 ![A dashboard section of Knit cards](images/demo/overview.gif)
 
@@ -47,8 +47,8 @@ living in it rather than by editing YAML.
   as occupied or dark, the averaged light level, and when each countdown ends. Use them in your
   own automations, scripts and dashboards.
 - Any on / off sensor can be a trigger, either way round (on while a door is closed, on while
-  nothing moves), and several count as one.
-- Several presence sensors count as one room; several light sensors are averaged, so a room with
+  nothing moves). Several count as one: the light is on while any of them says so.
+- Several light sensors are averaged, so a room with
   no sensor of its own can follow the rooms around it.
 - A **pause** list (guest mode, a "nobody home" helper, a cinema scene) stands Knit down for a
   light: any of them on, or only once all of them are.
@@ -67,14 +67,27 @@ features for the sensors you give it: no light sensor, no light-level settings t
 
 ![Adding a light in Knit](images/demo/setup.gif)
 
+The form asks for:
+
+| Field | What to pick |
+|---|---|
+| Light or switch | The light, or the switch of a plug-in lamp |
+| Sensors that turn it on | Motion, presence, a door or window contact, vibration: it's on while any of them is on |
+| Sensors that turn it on while off (inverted) | The other way round: on while a door is closed, or while nothing is moving |
+| Light level sensors | One or more, averaged. Leave empty and the light ignores daylight |
+| Pause while these are on | Guest mode, a "nobody home" helper: Knit leaves the light alone meanwhile |
+
+Only the light is required. (The recording was made before 0.9.0, when the two sensor lists were a
+single "Presence sensors" field; everything else is the same.)
+
 ### Countdown and dim
 
-When the room empties, the **motion timeout** starts (5 minutes unless you change it). The ring
+When the room empties (or the door closes, or the vibration stops), the **motion timeout** starts (5 minutes unless you change it). The ring
 round the card's icon drains as it counts down, and the card says "Off in 4:12".
 
 For the last part of the countdown (the **dim before off**, 1 minute by default, at most three
 quarters of the timeout) the light dims to half. That's the warning: if you're still there, move,
-and the brightness goes back to what it was. If nobody does, the light goes off, and the next
+(or open the door again) and the brightness goes back to what it was. If nobody does, the light goes off, and the next
 time it comes on it's at its own brightness, not the dimmed one, even if Home Assistant restarted
 in between. Lights that can't be dimmed skip the dim and just count down.
 
@@ -84,7 +97,7 @@ in between. Lights that can't be dimmed skip the dim and just count down.
 
 Give a light one or more light sensors and it follows the daylight:
 
-- Presence only turns it on while the room is **dark** (below *Dark below*).
+- Its sensors only turn it on while the room is **dark** (below *Dark below*).
 - Once the room has been **light** (above *Light above*) for the *Off when light* time, it goes
   off, with its own countdown on the card. The gap between the two levels stops it flickering on
   and off at dusk.
@@ -104,7 +117,9 @@ entities you want alongside (a power reading, a scene picker).
 **More controls** holds the settings, written as sentences you can edit: "Motion detected turns
 the light on, it goes off after `05:00` mins, and will dim `01:00` mins before turning off."
 Change a time, flip Motion control or Light level off for the evening: it takes effect at once.
-Once a room is tuned, either group can be hidden from the card and carries on working.
+The group is named and worded for the sensor behind it, so a cupboard light reads **Door control**,
+"Opening the door turns the light on, it goes off `05:00` mins after it closes". Once a room is
+tuned, either group can be hidden from the card and carries on working.
 
 ![Changing the settings on the card](images/demo/card-settings.gif)
 
@@ -165,7 +180,7 @@ and will dim `01:00` mins before turning off."
 | Vibration sensor | A desk, workbench or armchair: on while there's movement | The timeout bridges the still moments; the dim is the nudge to move |
 | Bed or chair pressure sensor | A reading lamp that's on while you're sat there | The lamp fades out a little after you get up, not the moment you lean forward |
 | Doorbell or button | A porch light for a few minutes after it's pressed | The sensor is only on for a moment; the timeout is the whole point |
-| Anything else | A TV's bias light, a desk lamp while the PC is on | A threshold or template helper turns any reading into on / off |
+| Anything else | A TV's bias light, a desk lamp while the PC is on | The light outlasts a short standby instead of flicking off with it |
 
 Every sensor can also be used **the other way round**. The set-up form has two lists: *Sensors
 that turn it on* (while they're on: motion, an open door, vibration) and *Sensors that turn it on
@@ -173,10 +188,23 @@ while off (inverted)*: a bathroom light that's on while the door is shut, a nigh
 on when the bed sensor clears, a light that's on while nothing is moving. Sensors from both lists
 can share a light: it's on while any of them says so, and counts down once none does.
 
+What the card says for each:
+
+| Sensor | Group | Beside it |
+|---|---|---|
+| Motion, presence | Motion control | Occupied / Empty · 3mins ago |
+| Door, window, garage door | Door control (Window, Garage door) | Open / Closed · 3mins ago |
+| Vibration | Vibration control | Vibration / Still · 3mins ago |
+| Anything else, or a mix | Sensor control | Active / Clear · 3mins ago |
+
+Not a binary sensor? An `input_boolean` helper works directly, and a threshold or template helper
+makes one out of anything else (a plug's power, a media player's state).
+
 ### Motion-controlled devices
 
 For something that should go off when the room empties but must never be switched on for you: a
-heater, a fan, a decorative light. It gets the same countdown and card, and can be told to switch
+heater, a fan, a decorative light. It takes the same sensors as a light, either way round: a fan
+that goes off a few minutes after the bathroom door opens. It gets the same countdown and card, and can be told to switch
 off again if it comes back on by itself after a power cut.
 
 ### Appliances (in development)
