@@ -15,6 +15,7 @@ from homeassistant.util import dt as dt_util
 from .const import (
     CONF_ILLUMINANCE,
     CONF_LIGHT,
+    CONF_MANAGED,
     CONF_OFF_AFTER_OUTAGE,
     CONF_PAUSE,
     CONF_PAUSE_MATCH,
@@ -24,7 +25,7 @@ from .const import (
     SIGNAL_UPDATE,
     TYPE_SWITCH,
 )
-from .engine import BRIGHTNESS, OFF, ON, Action, Engine
+from .engine import BRIGHTNESS, HAND_BACK, OFF, ON, Action, Engine
 from .entity import dimmable
 from .trigger import active, describe
 
@@ -56,6 +57,7 @@ class LightController:
         self.pause: list[str] = [pause] if isinstance(pause, str) else list(pause)
         self.pause_all: bool = conf.get(CONF_PAUSE_MATCH) == "all"
         self.engine = Engine()
+        self.engine.managed_brightness = bool(conf.get(CONF_MANAGED)) and not self.switch_only
         # a feature with no sensor is off (and has no switch): with only a light sensor, the
         # light follows the light level (on when dark, off when light)
         self.engine.settings.motion = bool(self.triggers)
@@ -195,9 +197,26 @@ class LightController:
             elif a.kind == ON:
                 data = {"brightness": a.brightness} if a.brightness and domain == "light" else {}
                 self.hass.async_create_task(self._call(domain, "turn_on", data))
+            elif a.kind == HAND_BACK and domain == "light":
+                self.hass.async_create_task(self._hand_back(a.brightness))
             elif a.kind == BRIGHTNESS and domain == "light" and a.brightness:
                 self.hass.async_create_task(self._call("light", "turn_on", {"brightness": a.brightness}))
         self._update()
+
+    async def _hand_back(self, brightness: int | None) -> None:
+        """After a dim, with the brightness managed elsewhere: Adaptive Lighting (if it runs this
+        light) is told the light is its own again and applies its settings now; otherwise the
+        brightness from before the dim is put back."""
+        al = "adaptive_lighting"
+        if self.hass.services.has_service(al, "set_manual_control") and self.hass.services.has_service(al, "apply"):
+            try:
+                await self.hass.services.async_call(al, "set_manual_control", {"lights": [self.light], "manual_control": False}, blocking=True)
+                await self.hass.services.async_call(al, "apply", {"lights": [self.light], "turn_on_lights": False}, blocking=True)
+                return
+            except Exception as err:  # noqa: BLE001 (not one of its lights, or its switch is off)
+                _LOGGER.debug("%s: Adaptive Lighting didn't take the brightness back: %s", self.light, err)
+        if brightness:
+            await self._call("light", "turn_on", {"brightness": brightness})
 
     async def _call(self, domain: str, service: str, data: dict) -> None:
         try:

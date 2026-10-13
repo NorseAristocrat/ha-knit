@@ -14,6 +14,8 @@ Behaviour, per light:
   Light level  on: once it has counted as light (above Light above) for `off_after`
                seconds the light goes off. With Motion off it also turns the light on when
                it gets dark. Off: the light level is ignored.
+  Managed      (brightness is managed by something else): the dim still happens, but the
+               light is turned on plain, and after a dim the brightness is handed back.
   Paused       (an entity such as guests being on): nothing happens at all.
   turn_on      False for a motion-controlled device: presence never turns it on,
                it only goes off once the room has been empty for the timeout.
@@ -29,11 +31,13 @@ DIM_MAX = 0.75  # the dim is at most this share of the auto-off
 ON = "on"
 OFF = "off"
 BRIGHTNESS = "brightness"
+HAND_BACK = "hand_back"  # brightness is managed elsewhere: give it back after a dim
 
 
 @dataclass
 class Action:
-    """What the controller should do: ON (brightness or None), OFF, or BRIGHTNESS."""
+    """What the controller should do: ON (brightness or None), OFF, BRIGHTNESS, or HAND_BACK
+    (the brightness from before the dim, for when nothing else takes it back)."""
 
     kind: str
     brightness: int | None = None
@@ -62,6 +66,9 @@ class Countdown:
 class Engine:
     settings: Settings = field(default_factory=Settings)
     dimmable: bool = True
+    # something else sets the brightness (Adaptive Lighting, an automation): it still dims as a
+    # warning, but turns on plain and hands the brightness back after a dim
+    managed_brightness: bool = False
     occupied: bool | None = None
     light_on: bool = False
     brightness: int | None = None
@@ -121,7 +128,7 @@ class Engine:
             return out
         # came on at (or below) the dimmed level while a brightness is waiting: put it back
         if self.restore is not None:
-            if brightness is not None and brightness <= self.restore // 2 + 3:
+            if not self.managed_brightness and brightness is not None and brightness <= self.restore // 2 + 3:
                 out.append(Action(BRIGHTNESS, self.restore))
                 self.brightness = self.restore
             self.restore = None
@@ -242,7 +249,7 @@ class Engine:
         self.auto = None
         self.dim_at = None
         if restore and self.dimmed and self.light_on and self.restore is not None:
-            out.append(Action(BRIGHTNESS, self.restore))
+            out.append(Action(HAND_BACK if self.managed_brightness else BRIGHTNESS, self.restore))
             self.brightness = self.restore
             self.restore = None
         self.dimmed = False
@@ -258,6 +265,8 @@ class Engine:
         """On, at the brightness from before a dim if it went off dimmed (a light keeps the last
         brightness it had, so it would come back dimmed). That brightness is kept until the light
         reports on, so a turn-on that fails doesn't lose it."""
+        if self.managed_brightness:
+            self.restore = None
         return Action(ON, self.restore)
 
     def _off(self) -> Action:

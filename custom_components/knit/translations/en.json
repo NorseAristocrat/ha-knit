@@ -21,7 +21,8 @@
           "illuminance": "Light level sensors (lx)",
           "pause": "Pause while these are on (e.g. guests)",
           "start_on": "Turn its automatic features on now",
-          "pause_match": "Pause when"
+          "pause_match": "Pause when",
+          "brightness_managed": "Brightness is managed by something else (for example Adaptive Lighting, or other automations)"
         },
         "data_description": {
           "presence": "Motion, presence, a door or window contact, vibration: it's on while any of them is on (motion, open, vibrating), and counts down once they've all cleared. Leave both lists empty for no sensor control.",
@@ -29,7 +30,8 @@
           "illuminance": "One or more. With several, their average is used, so a room without a sensor can follow the rooms around it.",
           "pause": "Knit leaves it alone while they're on: nothing turns it on or off by itself, and its card says Automations paused.",
           "start_on": "Leave this off if an automation already controls it, so the two don't both act on it.",
-          "pause_match": "With several pause entities: any one of them on, or only once all of them are."
+          "pause_match": "With several pause entities: any one of them on, or only once all of them are.",
+          "brightness_managed": "Knit still dims the light as a warning before it goes off, but never sets a brightness of its own: it turns the light on plain, and after a dim it hands the brightness back (Adaptive Lighting is asked to take over again; without it, the brightness from before the dim is put back)."
         }
       },
       "auto_off_switch": {
@@ -94,7 +96,8 @@
           "illuminance": "Light level sensors (lx)",
           "pause": "Pause while these are on (e.g. guests)",
           "start_on": "Turn its automatic features on now",
-          "pause_match": "Pause when"
+          "pause_match": "Pause when",
+          "brightness_managed": "Brightness is managed by something else (for example Adaptive Lighting, or other automations)"
         },
         "data_description": {
           "presence": "Motion, presence, a door or window contact, vibration: it's on while any of them is on (motion, open, vibrating), and counts down once they've all cleared. Leave both lists empty for no sensor control.",
@@ -103,7 +106,8 @@
           "pause": "Knit leaves it alone while they're on: nothing turns it on or off by itself, and its card says Automations paused.",
           "start_on": "Leave this off if an automation already controls it, so the two don't both act on it.",
           "pause_match": "With several pause entities: any one of them on, or only once all of them are.",
-          "light": "What this smart device runs. Change it to move the device to another light: its settings, entities and cards stay."
+          "light": "What this smart device runs. Change it to move the device to another light: its settings, entities and cards stay.",
+          "brightness_managed": "Knit still dims the light as a warning before it goes off, but never sets a brightness of its own: it turns the light on plain, and after a dim it hands the brightness back (Adaptive Lighting is asked to take over again; without it, the brightness from before the dim is put back)."
         }
       },
       "auto_off_switch": {
