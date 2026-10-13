@@ -73,6 +73,7 @@ The form asks for:
 | Sensors that turn it on while off (inverted) | The other way round: on while a door is closed, or while nothing is moving |
 | Light level sensors | One or more, averaged. Leave empty and the light ignores daylight |
 | Pause while these are on | Guest mode, a "nobody home" helper: Knit leaves the light alone meanwhile |
+| Brightness is managed by something else | Tick it for a light run by Adaptive Lighting or your own brightness automations |
 
 Only the light is required. (The recording was made before 0.9.0, when the two sensor lists were a
 single "Presence sensors" field; everything else is the same.)
@@ -196,6 +197,22 @@ What the card says for each:
 
 Not a binary sensor? An `input_boolean` helper works directly, and a threshold or template helper
 makes one out of anything else (a plug's power, a media player's state).
+
+### With Adaptive Lighting (or your own brightness automations)
+
+If something else decides how bright a light should be, such as
+[Adaptive Lighting](https://github.com/basnijholt/adaptive-lighting) or an automation of your own,
+tick **Brightness is managed by something else** when you add the light (or later, in Configure).
+Knit then keeps to switching:
+
+- It turns the light on plain, with no brightness, so the other thing picks the level.
+- It still dims to half as the warning before turning off.
+- After a dim it hands the brightness back: Adaptive Lighting is told the light is its own again
+  and applies its settings straight away. Without Adaptive Lighting, the brightness from before the
+  dim is put back.
+- A light that went off dimmed comes back at whatever is right now, not at its old brightness.
+
+In Adaptive Lighting, leave *take over control* on, so it leaves the dim alone while it lasts.
 
 ### Motion-controlled devices
 

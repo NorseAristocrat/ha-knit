@@ -13,7 +13,7 @@ engine = importlib.util.module_from_spec(_spec)
 sys.modules["engine"] = engine
 _spec.loader.exec_module(engine)
 Engine, Settings, Action = engine.Engine, engine.Settings, engine.Action
-ON, OFF, BRI = engine.ON, engine.OFF, engine.BRIGHTNESS
+ON, OFF, BRI, HAND_BACK = engine.ON, engine.OFF, engine.BRIGHTNESS, engine.HAND_BACK
 
 T0 = datetime(2026, 10, 2, 20, 0, 0)
 
@@ -294,6 +294,40 @@ class Paused(unittest.TestCase):
         e.set_occupied(False, at(0))
         e.tick(at(240))
         self.assertEqual(kinds(e.set_paused(True, at(245))), [(BRI, 200)])
+
+
+class ManagedBrightness(unittest.TestCase):
+    """Brightness managed by something else (Adaptive Lighting, automations)."""
+
+    def _dimmed(self):
+        e = make(auto_off_secs=100, dim_secs=40, light_level=False)
+        e.managed_brightness = True
+        e.set_light(True, 200, T0)
+        e.set_occupied(False, at(1))
+        self.assertEqual(kinds(e.tick(at(61))), [(BRI, 100)])  # the warning dim still happens
+        return e
+
+    def test_back_during_dim_hands_back(self):
+        e = self._dimmed()
+        self.assertEqual(kinds(e.set_occupied(True, at(70))), [(HAND_BACK, 200)])
+        self.assertIsNone(e.restore)
+
+    def test_off_dimmed_then_turns_on_plain(self):
+        e = self._dimmed()
+        self.assertEqual(kinds(e.tick(at(101))), [(OFF, None)])
+        self.assertEqual(kinds(e.set_occupied(True, at(200))), [(ON, None)])
+        self.assertIsNone(e.restore)
+
+    def test_coming_on_low_is_left_alone(self):
+        e = self._dimmed()
+        e.tick(at(101))
+        e.set_light(False, None, at(102))
+        self.assertEqual(e.set_light(True, 60, at(300)), [])  # whatever set 60 meant it
+        self.assertIsNone(e.restore)
+
+    def test_pausing_during_dim_hands_back(self):
+        e = self._dimmed()
+        self.assertEqual(kinds(e.set_paused(True, at(70))), [(HAND_BACK, 200)])
 
 
 if __name__ == "__main__":
