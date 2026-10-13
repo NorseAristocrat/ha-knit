@@ -50,8 +50,6 @@ the first field is required, and anything you skip can be added later with **Con
 
 ![Adding a light in Knit](images/demo/setup.gif)
 
-(Recorded before 0.9.2: the form is shorter now, with the rarely needed fields under Advanced options.)
-
 ### A room light on a motion sensor
 
 1. Add integration → Knit → **Light**.
