@@ -193,7 +193,7 @@ class LightController:
         domain = self.light.split(".")[0]
         for a in actions:
             if a.kind == OFF:
-                self.hass.async_create_task(self._call(domain, "turn_off", {}))
+                self.hass.async_create_task(self._turn_off(domain))
             elif a.kind == ON:
                 data = {"brightness": a.brightness} if a.brightness and domain == "light" else {}
                 self.hass.async_create_task(self._call(domain, "turn_on", data))
@@ -218,11 +218,22 @@ class LightController:
         if brightness:
             await self._call("light", "turn_on", {"brightness": brightness})
 
-    async def _call(self, domain: str, service: str, data: dict) -> None:
+    async def _turn_off(self, domain: str) -> None:
+        """Off; if that fails with the light still on, the engine (which counted it off) is told,
+        or it would never count down again (a light that stays on doesn't report)."""
+        if await self._call(domain, "turn_off", {}):
+            return
+        st = self.hass.states.get(self.light)
+        if st and st.state == STATE_ON:
+            self._do(self.engine.off_failed(st.attributes.get("brightness"), dt_util.utcnow()))
+
+    async def _call(self, domain: str, service: str, data: dict) -> bool:
         try:
             await self.hass.services.async_call(domain, service, {"entity_id": self.light, **data}, blocking=True)
         except Exception as err:  # noqa: BLE001
             _LOGGER.warning("%s: %s.%s failed: %s", self.light, domain, service, err)
+            return False
+        return True
 
     @callback
     def _update(self) -> None:

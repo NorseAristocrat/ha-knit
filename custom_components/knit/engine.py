@@ -202,6 +202,24 @@ class Engine:
         else:
             self.restore = None
 
+    def off_failed(self, brightness: int | None, now: datetime) -> list[Action]:
+        """The off didn't go through and the light still reports on (it won't report again, as
+        nothing changed): it counts as on again, still dimmed if it was, and whatever turned it
+        off counts down again from now, so the off is tried again."""
+        if self.light_on:
+            return []
+        self.light_on = True
+        self.brightness = brightness
+        self.resume()
+        out: list[Action] = []
+        if self.paused:
+            return out
+        if self.occupied is False:
+            out += self._maybe_start_auto(now)
+        if self.dark is False:
+            out += self._start_light(now)
+        return out
+
     def start_if_empty(self, now: datetime) -> list[Action]:
         """At start-up: the light already on in an empty room counts down."""
         if self.paused or self.occupied is not False:
@@ -272,7 +290,7 @@ class Engine:
     def _off(self) -> Action:
         """Off, counted as off straight away: someone coming in before the light reports off
         turns it back on, instead of being taken as finding it on. (Were the off to fail, the
-        light's next report puts this right.)"""
+        controller hands the light's state back through off_failed.)"""
         self.light_on = False
         self.brightness = None
         self.auto = None
