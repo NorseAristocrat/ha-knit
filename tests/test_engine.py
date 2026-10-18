@@ -94,6 +94,28 @@ class AutoOff(unittest.TestCase):
         self.assertEqual(kinds(e.set_occupied(True, at(250))), [(BRI, 200)])
         self.assertIsNone(e.next_deadline())
 
+    def test_off_failed_stays_dimmed_and_counts_down_again(self):
+        e = make(dark_below=5, auto_off_secs=300, dim_secs=60)
+        e.set_light(True, 200, T0)
+        e.set_occupied(False, at(0))
+        e.tick(at(240))
+        self.assertEqual(kinds(e.tick(at(300))), [(OFF, None)])
+        # still on at the dimmed level: no brightness change, no second dim, off again
+        self.assertEqual(e.off_failed(100, at(303)), [])
+        self.assertEqual(kinds(e.tick(at(543))), [])
+        self.assertEqual(kinds(e.tick(at(603))), [(OFF, None)])
+        # someone back before it goes off gets the old brightness back
+        e.off_failed(100, at(605))
+        self.assertEqual(kinds(e.set_occupied(True, at(610))), [(BRI, 200)])
+
+    def test_off_failed_after_light_reported_does_nothing(self):
+        e = make(dark_below=5)
+        e.set_light(True, 200, T0)
+        e.set_occupied(False, at(0))
+        e.tick(at(300))
+        e.set_light(True, 200, at(301))  # it reported on in between
+        self.assertEqual(e.off_failed(200, at(302)), [])
+
     def test_dim_capped_at_75_percent(self):
         e = make(dark_below=5, auto_off_secs=100, dim_secs=1000)
         e.set_light(True, 200, T0)
@@ -230,6 +252,17 @@ class LightLevel(unittest.TestCase):
         self.assertFalse(e.dark)
         self.assertEqual(e.next_deadline(), at(140))
         self.assertEqual(kinds(e.tick(at(140))), [(OFF, None)])
+
+    def test_off_failed_counts_down_again(self):
+        e = make(dark_below=1.3, light_above=2.0, off_after_secs=120)
+        e.set_light(True, 200, T0)
+        e.set_lux(2.1, at(20))
+        self.assertEqual(kinds(e.tick(at(140))), [(OFF, None)])
+        # the off didn't go through: on again, and tried again after another countdown
+        self.assertEqual(e.off_failed(200, at(143)), [])
+        self.assertTrue(e.light_on)
+        self.assertEqual(e.next_deadline(), at(263))
+        self.assertEqual(kinds(e.tick(at(263))), [(OFF, None)])
 
     def test_dark_again_cancels(self):
         e = make(dark_below=1.3, light_above=2.0)
