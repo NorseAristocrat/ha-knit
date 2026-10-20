@@ -13,6 +13,7 @@ from homeassistant.helpers.event import async_track_point_in_utc_time, async_tra
 from homeassistant.util import dt as dt_util
 
 from .const import (
+    CONF_DARK_CHECK,
     CONF_ILLUMINANCE,
     CONF_LIGHT,
     CONF_MANAGED,
@@ -31,7 +32,6 @@ from .trigger import active, describe
 
 _LOGGER = logging.getLogger(__name__)
 NO_VALUE = (STATE_UNAVAILABLE, STATE_UNKNOWN, None)
-SUN = "sun.sun"
 
 
 class LightController:
@@ -57,6 +57,8 @@ class LightController:
         pause = conf.get(CONF_PAUSE) or []
         self.pause: list[str] = [pause] if isinstance(pause, str) else list(pause)
         self.pause_all: bool = conf.get(CONF_PAUSE_MATCH) == "all"
+        # turning off, the light comes on if it's still dark (light level alone)
+        self.dark_check: str | None = conf.get(CONF_DARK_CHECK) or None
         self.engine = Engine()
         self.engine.managed_brightness = bool(conf.get(CONF_MANAGED)) and not self.switch_only
         # a feature with no sensor is off (and has no switch): with only a light sensor, the
@@ -88,8 +90,8 @@ class LightController:
         e.set_lux(self.lux(), now)
         watch = [self.light, *self.triggers, *self.illuminance]
         watch += self.pause
-        if self.engine.settings.light_level:
-            watch.append(SUN)
+        if self.dark_check and self.engine.settings.light_level:
+            watch.append(self.dark_check)
         self._unsubs.append(async_track_state_change_event(self.hass, watch, self._changed))
         self._started = True
         # the light on in an empty room when it starts: count down
@@ -146,10 +148,10 @@ class LightController:
             out += e.set_lux(self.lux(), now)
         if eid in self.pause:
             out += e.set_paused(self._paused(), now)
-        if eid == SUN and new is not None and new.state in ("above_horizon", "below_horizon"):
+        if eid == self.dark_check and new is not None and new.state in ("on", "off"):
             old = event.data["old_state"]
-            if old is None or old.state != new.state:
-                out += e.set_sun(new.state == "above_horizon")
+            if old is not None and old.state in ("on", "off") and old.state != new.state:
+                out += e.set_dark_check(new.state == STATE_ON)
         self._do(out)
 
     # ---- readings -----------------------------------------------------------------------

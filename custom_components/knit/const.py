@@ -15,6 +15,7 @@ CONF_PRESENCE_OFF = "presence_off"  # trigger sensors the other way round: occup
 CONF_ILLUMINANCE = "illuminance"  # one or more light level sensors (lx): their average is judged
 CONF_PAUSE = "pause"  # while these entities are on (any / all of them), nothing happens (e.g. guests)
 CONF_PAUSE_MATCH = "pause_match"  # "any" (default) or "all" of the pause entities
+CONF_DARK_CHECK = "dark_check"  # light level alone: when this turns off, on if it still counts as dark
 CONF_MANAGED = "brightness_managed"  # brightness is set by something else (Adaptive Lighting, automations)
 CONF_START_ON = "start_on"  # turn the automatic features on when it's set up
 CONF_OFF_AFTER_OUTAGE = "off_after_outage"  # motion-controlled device: off again if it comes back on after a power cut

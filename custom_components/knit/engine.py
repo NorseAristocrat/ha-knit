@@ -13,8 +13,9 @@ Behaviour, per light:
                and someone coming back puts the brightness back.
   Light level  on: once it has counted as light (above Light above) for `off_after`
                seconds the light goes off. With Motion off it also turns the light on when
-               it gets dark, or at sunset if it is still dark then (a grey day that never
-               counted as light) and it hasn't come on for the dark since sunrise.
+               it gets dark, or when its dark check entity turns off while it still counts
+               as dark (a grey day never counts as light, so it never gets dark), unless it
+               already came on for the dark since that entity turned on.
                Off: the light level is ignored.
   Managed      (brightness is managed by something else): the dim still happens, but the
                light is turned on plain, and after a dim the brightness is handed back.
@@ -83,7 +84,7 @@ class Engine:
     dimmed: bool = False
     restore: int | None = None  # the brightness from before the dim, to put back
     light: Countdown | None = None  # off when light
-    dark_on: bool = False  # it was turned on for the dark since sunrise (sunset then leaves it be)
+    dark_on: bool = False  # turned on for the dark since the dark check began (its end then leaves it be)
 
     # ---- derived ----------------------------------------------------------------------
 
@@ -169,11 +170,12 @@ class Engine:
         out += self._on_when_dark()
         return out
 
-    def set_sun(self, up: bool) -> list[Action]:
-        """Sunrise starts a new day; at sunset a light that follows the light level alone comes on
-        if it still counts as dark (it may never have counted as light today, so it never got
-        dark), unless it has already been turned on for the dark today."""
-        if up:
+    def set_dark_check(self, on: bool) -> list[Action]:
+        """The dark check entity (e.g. a morning time-of-day helper): turning on starts the check;
+        turning off, a light that follows the light level alone comes on if it still counts as
+        dark (it may never have counted as light today, so it never got dark), unless it has
+        already been turned on for the dark since the check began."""
+        if on:
             self.dark_on = False
             return []
         return [] if self.dark_on else self._on_when_dark()
