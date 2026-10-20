@@ -301,37 +301,37 @@ class LightLevel(unittest.TestCase):
         e.set_light(False, None, at(141))
         self.assertEqual(kinds(e.set_lux(1.0, at(200))), [(ON, None)])  # dark again: on again
 
-    def test_still_dark_at_sunset_turns_on(self):
-        # a grey day: dark since yesterday, so it never got dark today; sunset turns it on
+    def test_still_dark_when_the_check_ends_turns_on(self):
+        # a grey day: dark since yesterday, so it never got dark today; the check's end turns it on
         e = make(dark_below=30, light_above=45, motion=False)
-        e.set_sun(True)
+        e.set_dark_check(True)
         e.set_lux(18.0, at(10))  # brighter, but never light
-        self.assertEqual(kinds(e.set_sun(False)), [(ON, None)])
+        self.assertEqual(kinds(e.set_dark_check(False)), [(ON, None)])
 
-    def test_sunset_leaves_it_once_on_for_the_dark_today(self):
-        # it got dark (and came on) this afternoon, then was switched off: sunset leaves it off
+    def test_check_end_leaves_it_once_on_for_the_dark(self):
+        # it got dark (and came on) this afternoon, then was switched off: the check's end leaves it off
         e = make(dark_below=30, light_above=45, motion=False)
-        e.set_sun(True)
+        e.set_dark_check(True)
         e.set_lux(60.0, at(10))  # light
         self.assertEqual(kinds(e.set_lux(10.0, at(20))), [(ON, None)])
         e.set_light(True, 200, at(21))
         e.set_light(False, None, at(30))
-        self.assertEqual(e.set_sun(False), [])
-        e.set_sun(True)  # a new day
-        self.assertEqual(kinds(e.set_sun(False)), [(ON, None)])
+        self.assertEqual(e.set_dark_check(False), [])
+        e.set_dark_check(True)  # the next check
+        self.assertEqual(kinds(e.set_dark_check(False)), [(ON, None)])
 
-    def test_sunset_does_nothing_when_light_on_or_light(self):
+    def test_check_end_does_nothing_when_light_on_or_light(self):
         e = make(dark_below=30, light_above=45, motion=False)
         e.set_light(True, 200, at(1))
-        self.assertEqual(e.set_sun(False), [])
+        self.assertEqual(e.set_dark_check(False), [])
         e = make(dark_below=30, light_above=45, motion=False)
         e.set_lux(60.0, at(1))
-        self.assertEqual(e.set_sun(False), [])
+        self.assertEqual(e.set_dark_check(False), [])
 
-    def test_sunset_does_nothing_with_motion_on(self):
+    def test_check_end_does_nothing_with_motion_on(self):
         e = make(dark_below=30, light_above=45)
         e.set_occupied(False, at(1))
-        self.assertEqual(e.set_sun(False), [])
+        self.assertEqual(e.set_dark_check(False), [])
 
     def test_switching_motion_off_while_dark_turns_on(self):
         e = make(dark_below=5)

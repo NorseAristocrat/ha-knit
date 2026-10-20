@@ -22,8 +22,10 @@ Give a light one or more light sensors and it follows the daylight:
   off, with its own countdown on the card. The gap between the two levels stops it flickering on
   and off at dusk.
 - With Motion control switched off, the light level works by itself: on when it gets dark, off
-  when it gets light. On a grey day that never counts as light, it never gets dark either, so it
-  comes on at sunset instead (if it hasn't already come on for the dark since sunrise).
+  when it gets light. A grey day may never count as light, so it never gets dark either: give it
+  a *Turn on when this ends, if it's still dark* entity under Advanced options (for example a
+  morning time-of-day helper) and, when that turns off, the light comes on if it still counts as
+  dark, unless it already came on for the dark since the entity turned on.
 
 ![A light following the light level](../images/demo/light-level.gif)
 

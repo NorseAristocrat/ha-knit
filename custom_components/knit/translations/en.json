@@ -25,11 +25,12 @@
         "sections": {
           "advanced": {
             "name": "Advanced options",
-            "description": "Inverted sensors, pausing, and brightness run by something else.",
+            "description": "Inverted sensors, pausing, a daily dark check, and brightness run by something else.",
             "data": {
               "presence_off": "Sensors that turn it on while off (inverted)",
               "pause": "Pause while these are on (e.g. guests)",
               "pause_match": "Pause when",
+              "dark_check": "Turn on when this ends, if it's still dark",
               "brightness_managed": "Brightness is managed by something else (for example Adaptive Lighting, or other automations)",
               "start_on": "Turn its automatic features on now"
             },
@@ -37,6 +38,7 @@
               "presence_off": "The other way round: on while a door is closed, or while there's no motion or vibration.",
               "pause": "Knit leaves it alone while they're on, and its card says Automations paused. With two or more, Configure then asks whether any or all of them pause it.",
               "pause_match": "Any one of them on, or only once all of them are.",
+              "dark_check": "For a light with only light level sensors. A dull day may never count as light, so it never gets dark either: when this turns off (for example a morning time-of-day helper ending), the light comes on if it still counts as dark, unless Knit already turned it on for the dark since this turned on.",
               "brightness_managed": "Knit turns the light on without setting a brightness. It still dims it as a warning before it goes off, then hands the brightness back.",
               "start_on": "Turn this off if an automation already controls it, so the two don't both act on it."
             }
@@ -99,11 +101,12 @@
         "sections": {
           "advanced": {
             "name": "Advanced options",
-            "description": "Inverted sensors, pausing, and brightness run by something else.",
+            "description": "Inverted sensors, pausing, a daily dark check, and brightness run by something else.",
             "data": {
               "presence_off": "Sensors that turn it on while off (inverted)",
               "pause": "Pause while these are on (e.g. guests)",
               "pause_match": "Pause when",
+              "dark_check": "Turn on when this ends, if it's still dark",
               "brightness_managed": "Brightness is managed by something else (for example Adaptive Lighting, or other automations)",
               "light": "Move to another light or switch"
             },
@@ -111,6 +114,7 @@
               "presence_off": "The other way round: on while a door is closed, or while there's no motion or vibration.",
               "pause": "Knit leaves it alone while they're on, and its card says Automations paused. With two or more, Configure then asks whether any or all of them pause it.",
               "pause_match": "Any one of them on, or only once all of them are.",
+              "dark_check": "For a light with only light level sensors. A dull day may never count as light, so it never gets dark either: when this turns off (for example a morning time-of-day helper ending), the light comes on if it still counts as dark, unless Knit already turned it on for the dark since this turned on.",
               "brightness_managed": "Knit turns the light on without setting a brightness. It still dims it as a warning before it goes off, then hands the brightness back.",
               "light": "Its settings, entities and cards move with it."
             }
