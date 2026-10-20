@@ -31,6 +31,7 @@ from .trigger import active, describe
 
 _LOGGER = logging.getLogger(__name__)
 NO_VALUE = (STATE_UNAVAILABLE, STATE_UNKNOWN, None)
+SUN = "sun.sun"
 
 
 class LightController:
@@ -87,6 +88,8 @@ class LightController:
         e.set_lux(self.lux(), now)
         watch = [self.light, *self.triggers, *self.illuminance]
         watch += self.pause
+        if self.engine.settings.light_level:
+            watch.append(SUN)
         self._unsubs.append(async_track_state_change_event(self.hass, watch, self._changed))
         self._started = True
         # the light on in an empty room when it starts: count down
@@ -143,6 +146,10 @@ class LightController:
             out += e.set_lux(self.lux(), now)
         if eid in self.pause:
             out += e.set_paused(self._paused(), now)
+        if eid == SUN and new is not None and new.state in ("above_horizon", "below_horizon"):
+            old = event.data["old_state"]
+            if old is None or old.state != new.state:
+                out += e.set_sun(new.state == "above_horizon")
         self._do(out)
 
     # ---- readings -----------------------------------------------------------------------

@@ -13,7 +13,9 @@ Behaviour, per light:
                and someone coming back puts the brightness back.
   Light level  on: once it has counted as light (above Light above) for `off_after`
                seconds the light goes off. With Motion off it also turns the light on when
-               it gets dark. Off: the light level is ignored.
+               it gets dark, or at sunset if it is still dark then (a grey day that never
+               counted as light) and it hasn't come on for the dark since sunrise.
+               Off: the light level is ignored.
   Managed      (brightness is managed by something else): the dim still happens, but the
                light is turned on plain, and after a dim the brightness is handed back.
   Paused       (an entity such as guests being on): nothing happens at all.
@@ -81,6 +83,7 @@ class Engine:
     dimmed: bool = False
     restore: int | None = None  # the brightness from before the dim, to put back
     light: Countdown | None = None  # off when light
+    dark_on: bool = False  # it was turned on for the dark since sunrise (sunset then leaves it be)
 
     # ---- derived ----------------------------------------------------------------------
 
@@ -165,6 +168,15 @@ class Engine:
             out += self._start_light(now)
         out += self._on_when_dark()
         return out
+
+    def set_sun(self, up: bool) -> list[Action]:
+        """Sunrise starts a new day; at sunset a light that follows the light level alone comes on
+        if it still counts as dark (it may never have counted as light today, so it never got
+        dark), unless it has already been turned on for the dark today."""
+        if up:
+            self.dark_on = False
+            return []
+        return [] if self.dark_on else self._on_when_dark()
 
     def update_settings(self, now: datetime, **changes) -> list[Action]:
         s = self.settings
@@ -276,6 +288,7 @@ class Engine:
     def _on_when_dark(self) -> list[Action]:
         s = self.settings
         if not self.paused and not s.motion and s.light_level and self.dark and not self.light_on:
+            self.dark_on = True
             return [self._turn_on()]
         return []
 
