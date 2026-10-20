@@ -22,7 +22,8 @@ Give a light one or more light sensors and it follows the daylight:
   off, with its own countdown on the card. The gap between the two levels stops it flickering on
   and off at dusk.
 - With Motion control switched off, the light level works by itself: on when it gets dark, off
-  when it gets light.
+  when it gets light. On a grey day that never counts as light, it never gets dark either, so it
+  comes on at sunset instead (if it hasn't already come on for the dark since sunrise).
 
 ![A light following the light level](../images/demo/light-level.gif)
 
