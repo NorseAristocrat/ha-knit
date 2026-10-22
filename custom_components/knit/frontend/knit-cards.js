@@ -67,7 +67,7 @@
  *   collapse_others: false                   # optional: opening this card leaves the others open
  */
 
-const SLC_VERSION = "55";
+const SLC_VERSION = "56";
 const PENDING_MS = 8000;
 const RING = 2 * Math.PI * 19;
 // which cards are open (and their More controls), so a redraw (as the editor does) keeps it
@@ -2701,6 +2701,7 @@ const chargeWord = (s) =>
   ({ charging: "Charging", full: "Full", discharging: "Not charging", not_charging: "Not charging", on: "Charging", off: "Not charging" })[s] ||
   (s ? s.charAt(0).toUpperCase() + s.slice(1).replace(/_/g, " ") : "—");
 const WAVE_BARS = 60; // the hero's waveform
+const PP_RING = 2 * Math.PI * 22; // the countdown ring round its play / pause button
 const CHARGER_CSS = `
   .why { font-size: 12px; opacity: 0.8; margin: 2px 0 0 28px; }
   .grp.nobtn > .note { margin-right: 0; }
@@ -2737,13 +2738,16 @@ const CHARGER_CSS = `
   .wave { position: relative; display: flex; align-items: center; gap: 2px; height: 18px; margin: 5px 0 4px; }
   .wave i { flex: 1; min-width: 1px; border-radius: 1px; background: var(--soft); opacity: 0.4; transition: background 0.3s, opacity 0.3s; }
   .wave i.p { background: var(--prime); opacity: 1; }
-  .tmc { position: relative; flex: none; display: flex; align-items: center; align-self: center; gap: 4px; }
+  .tmc { position: relative; flex: none; display: flex; align-items: center; align-self: center; gap: 8px; }
   .tmc button {
     width: 34px; height: 34px; border-radius: 17px; border: 1px solid var(--soft); background: rgba(0, 0, 0, 0.25); color: var(--prime);
     display: flex; align-items: center; justify-content: center; padding: 0; cursor: pointer; --mdc-icon-size: 20px;
   }
   :host(.light) .tmc button { background: rgba(255, 255, 255, 0.6); }
-  .tmc button.pp { width: 40px; height: 40px; border-radius: 20px; }
+  .tmc button.pp { position: relative; width: 40px; height: 40px; border-radius: 20px; overflow: visible; }
+  /* a countdown (timers:, e.g. the music pausing) drains round it, as round the icon on the plain tile */
+  .tmc .pring { position: absolute; inset: -5px; width: 48px; height: 48px; transform: rotate(-90deg); pointer-events: none; }
+  .tmc .pring circle { fill: none; stroke: var(--prime); stroke-width: 2.5; stroke-linecap: round; transition: stroke-dashoffset 1s linear; }
   .tmc button.pp.on { background: var(--bg); border-color: var(--bg); color: #fff; }
   /* opened, the tile keeps the hero's height (its foot and the panel's corners follow it) */
   :host(.wide) .tile.hero { height: calc(108px + var(--tab-x)); }
@@ -3044,7 +3048,7 @@ class KnitApplianceCard extends HTMLElement {
         <div class="txt"><div class="n">${esc(title)}</div><div class="s2" hidden></div><div class="wave" hidden aria-hidden="true"></div><div class="s"></div></div>
         ${
           c.media?.notify
-            ? `<div class="tmc" hidden><button data-mc="previous" aria-label="Previous"><ha-icon icon="mdi:skip-previous"></ha-icon></button><button class="pp" data-mc="play_pause" aria-label="Play or pause"><ha-icon icon="mdi:play"></ha-icon></button><button data-mc="next" aria-label="Next"><ha-icon icon="mdi:skip-next"></ha-icon></button></div>`
+            ? `<div class="tmc" hidden><button data-mc="previous" aria-label="Previous"><ha-icon icon="mdi:skip-previous"></ha-icon></button><button class="pp" data-mc="play_pause" aria-label="Play or pause"><svg class="pring" viewBox="0 0 48 48" aria-hidden="true"><circle cx="24" cy="24" r="22" stroke-dasharray="${PP_RING}" stroke-dashoffset="${PP_RING}"></circle></svg><ha-icon icon="mdi:play"></ha-icon></button><button data-mc="next" aria-label="Next"><ha-icon icon="mdi:skip-next"></ha-icon></button></div>`
             : ""
         }
         <button class="exp" aria-label="More for ${esc(title)}" aria-expanded="false"><ha-icon icon="mdi:chevron-down"></ha-icon></button>
@@ -3180,7 +3184,11 @@ class KnitApplianceCard extends HTMLElement {
       .filter(Boolean)
       .sort((x, y) => x.left - y.left)[0];
     if (soon) sub = `${soon.label} ${clock(soon.left)} · ${sub}`;
-    this.$(".ic .rg").style.strokeDashoffset = String(RING * (1 - clamp(soon?.total ? soon.left / soon.total : 0, 0, 1)));
+    const left = clamp(soon?.total ? soon.left / soon.total : 0, 0, 1);
+    this.$(".ic .rg").style.strokeDashoffset = String(RING * (1 - left));
+    // in hero mode (no icon) the ring drains round the play / pause button instead
+    const pr = this.$(".tmc .pring circle");
+    if (pr) pr.style.strokeDashoffset = String(PP_RING * (1 - left));
     const tile = this.$(".tile");
     tile.querySelector(".s").textContent = sub;
     const on = status === "charging";
