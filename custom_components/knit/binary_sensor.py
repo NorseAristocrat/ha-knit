@@ -8,13 +8,13 @@ from homeassistant.const import EntityCategory
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
-from .const import DOMAIN, ROLE_DARK, ROLE_OCCUPIED, TYPE_APPLIANCE
+from .const import DOMAIN, ROLE_DARK, ROLE_OCCUPIED, TYPE_APPLIANCE, TYPE_CHARGER
 from .entity import LiveEntity, features, kind
 
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, add: AddEntitiesCallback) -> None:
-    if kind(entry) == TYPE_APPLIANCE:
+    if kind(entry) in (TYPE_APPLIANCE, TYPE_CHARGER):
         return
     controller = hass.data[DOMAIN][entry.entry_id]
     motion, level = features(entry)

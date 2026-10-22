@@ -1,4 +1,4 @@
-"""Add a Knit device: a light, a motion-controlled device or an appliance, from the sensors it follows."""
+"""Add a Knit device: a light, a motion-controlled device, an appliance or a charger, from the sensors it follows."""
 
 from __future__ import annotations
 
@@ -11,6 +11,11 @@ from homeassistant.data_entry_flow import section
 from homeassistant.helpers import selector
 
 from .const import (
+    CONF_BATTERY,
+    CONF_CHARGING,
+    CONF_FULL_CHARGE,
+    CONF_HOME,
+    CONF_PLUG,
     CONF_STATUS_NAMES,
     CONF_DARK_CHECK,
     CONF_DOOR,
@@ -27,6 +32,7 @@ from .const import (
     CONF_TYPE,
     DOMAIN,
     TYPE_APPLIANCE,
+    TYPE_CHARGER,
     TYPE_LIGHT,
     TYPE_SWITCH,
 )
@@ -67,7 +73,20 @@ OPTION_FIELDS = {
     TYPE_LIGHT: (CONF_PRESENCE, CONF_PRESENCE_OFF, CONF_ILLUMINANCE, CONF_PAUSE, CONF_PAUSE_MATCH, CONF_DARK_CHECK, CONF_MANAGED),
     TYPE_SWITCH: (CONF_PRESENCE, CONF_PRESENCE_OFF, CONF_PAUSE, CONF_PAUSE_MATCH, CONF_OFF_AFTER_OUTAGE),
     TYPE_APPLIANCE: (CONF_DOOR, *CONF_STATUS_NAMES.values()),
+    TYPE_CHARGER: (CONF_PLUG, CONF_CHARGING, CONF_FULL_CHARGE, CONF_HOME),
 }
+
+# what each kind of device is built around (its unique id, and what Configure can move it to):
+# a light / switch, an appliance's power sensor, a charger's battery
+BASE_KEYS = {TYPE_APPLIANCE: CONF_POWER, TYPE_CHARGER: CONF_BATTERY}
+
+
+def _base_selector(kind: str):
+    if kind == TYPE_APPLIANCE:
+        return _ent(domain="sensor", device_class="power")
+    if kind == TYPE_CHARGER:
+        return _ent(domain="sensor", device_class="battery")
+    return _ent(domain=BASE_DOMAINS[kind])
 
 
 def _names_clash(user_input: dict) -> bool:
@@ -86,6 +105,16 @@ def _schema(kind: str, d: dict) -> tuple[dict, dict]:
             for status, key in CONF_STATUS_NAMES.items()
         }
         return {_opt(d, CONF_DOOR): _ent(domain="binary_sensor")}, names
+    if kind == TYPE_CHARGER:
+        main = {
+            vol.Required(CONF_PLUG, **({"default": d[CONF_PLUG]} if d.get(CONF_PLUG) else {})): _ent(domain=["switch", "input_boolean"]),
+            _opt(d, CONF_CHARGING): _ent(domain=["sensor", "binary_sensor"]),
+        }
+        advanced = {
+            _opt(d, CONF_FULL_CHARGE): _ent(domain=["schedule", "binary_sensor", "input_boolean"]),
+            _opt(d, CONF_HOME): _ent(domain=["person", "device_tracker", "binary_sensor", "input_boolean"]),
+        }
+        return main, advanced
     # the sensors that turn it on while they're on (motion, an open door)
     main = {_opt(d, CONF_PRESENCE): _ent(domain=TRIGGER_DOMAINS, multiple=True)}
     if kind == TYPE_LIGHT:
@@ -119,6 +148,8 @@ def _advanced_used(d: dict) -> bool:
         or d.get(CONF_PAUSE)
         or d.get(CONF_DARK_CHECK)
         or d.get(CONF_MANAGED)
+        or d.get(CONF_FULL_CHARGE)
+        or d.get(CONF_HOME)
         or d.get(CONF_OFF_AFTER_OUTAGE) is False
         or d.get(CONF_START_ON) is False
         # an appliance's status given a name of its own
@@ -139,7 +170,7 @@ class KnitConfigFlow(ConfigFlow, domain=DOMAIN):
     VERSION = 1
 
     async def async_step_user(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
-        return self.async_show_menu(step_id="user", menu_options=[TYPE_LIGHT, TYPE_SWITCH, TYPE_APPLIANCE])
+        return self.async_show_menu(step_id="user", menu_options=[TYPE_LIGHT, TYPE_SWITCH, TYPE_APPLIANCE, TYPE_CHARGER])
 
     async def _create(self, kind: str, main: str, user_input: dict) -> ConfigFlowResult:
         await self.async_set_unique_id(f"{kind}:{main}")
@@ -189,6 +220,20 @@ class KnitConfigFlow(ConfigFlow, domain=DOMAIN):
         }
         return self.async_show_form(step_id="appliance", data_schema=_form(main, advanced, bool(errors) or _advanced_used(d)), errors=errors)
 
+    async def async_step_charger(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
+        if user_input is not None:
+            user_input = _flat(user_input)
+            return await self._create(TYPE_CHARGER, user_input[CONF_BATTERY], user_input)
+        d = {}
+        main, advanced = _schema(TYPE_CHARGER, d)
+        main = {
+            vol.Required(CONF_NAME): selector.TextSelector(),
+            vol.Required(CONF_BATTERY): _base_selector(TYPE_CHARGER),
+            **main,
+        }
+        advanced[vol.Optional(CONF_START_ON, default=True)] = selector.BooleanSelector()
+        return self.async_show_form(step_id="charger", data_schema=_form(main, advanced, False))
+
     @staticmethod
     @callback
     def async_get_options_flow(entry: ConfigEntry) -> OptionsFlow:
@@ -199,8 +244,8 @@ class KnitOptionsFlow(OptionsFlow):
     async def async_step_init(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
         entry = self.config_entry
         kind = entry.data.get(CONF_TYPE, TYPE_LIGHT)
-        # what it's built around: a light / switch, or an appliance's power sensor
-        key = CONF_POWER if kind == TYPE_APPLIANCE else CONF_LIGHT
+        # what it's built around: a light / switch, an appliance's power sensor, a charger's battery
+        key = BASE_KEYS.get(kind, CONF_LIGHT)
         current = {**entry.data, **entry.options}
         errors: dict = {}
         if user_input is not None:
@@ -233,8 +278,7 @@ class KnitOptionsFlow(OptionsFlow):
             current = {**{k: v for k, v in current.items() if k not in OPTION_FIELDS[kind]}, **user_input, key: base}
         main, advanced = _schema(kind, current)
         # moving it to another light (or plug) is rare: last, under Advanced options
-        base_selector = _ent(domain="sensor", device_class="power") if kind == TYPE_APPLIANCE else _ent(domain=BASE_DOMAINS[kind])
-        advanced[vol.Required(key, default=current[key])] = base_selector
+        advanced[vol.Required(key, default=current[key])] = _base_selector(kind)
         open_ = bool(errors) or _advanced_used({k: current.get(k) for k in OPTION_FIELDS[kind]})
         return self.async_show_form(step_id=kind, data_schema=_form(main, advanced, open_), errors=errors)
 
@@ -246,6 +290,9 @@ class KnitOptionsFlow(OptionsFlow):
         return await self.async_step_init(user_input)
 
     async def async_step_appliance(self, user_input=None):
+        return await self.async_step_init(user_input)
+
+    async def async_step_charger(self, user_input=None):
         return await self.async_step_init(user_input)
 
 

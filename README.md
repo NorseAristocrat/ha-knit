@@ -101,10 +101,11 @@ To fold a group of cards away under a title, add a **Knit Section** card above t
 | [The light card](docs/light-card.md) | What the card does, its editor, its YAML, and using it without the integration |
 | [The section card](docs/section-card.md) | Folding groups of cards, opening on a trigger, the button, and its YAML |
 | [Appliances (in development)](docs/appliances.md) | A dishwasher, washing machine or dryer on a power-reporting plug: status, cycle countdown and its card |
+| [Chargers (in development)](docs/chargers.md) | A device on battery charged from a smart plug, kept between two levels, with a full-charge schedule |
 
 ## Development
 
-The decisions live in `custom_components/knit/engine.py` (lights) and `appliance.py`, with no Home
+The decisions live in `custom_components/knit/engine.py` (lights), `appliance.py` and `charger.py`, with no Home
 Assistant in them:
 
 ```sh

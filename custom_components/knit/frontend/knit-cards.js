@@ -67,7 +67,7 @@
  *   collapse_others: false                   # optional: opening this card leaves the others open
  */
 
-const SLC_VERSION = "41";
+const SLC_VERSION = "42";
 const PENDING_MS = 8000;
 const RING = 2 * Math.PI * 19;
 // which cards are open (and their More controls), so a redraw (as the editor does) keeps it
@@ -2619,6 +2619,9 @@ class SmartLightSectionEditor extends HTMLElement {
 // ---- knit-appliance-card -----------------------------------------------------------------
 /*
  * A Knit appliance (a dishwasher, a washing machine) as a tile: its status and the cycle's
+ * countdown. A Knit charger shows on the same card (see "chargers" below).
+ *
+ * An appliance: its status and the cycle's
  * countdown ("Running · 0:45 left"), filling as the cycle goes and pulsing while it's Full.
  * Opening it shows buttons to correct the status, its power and door, and under More controls
  * how it tells running / finished / emptied, as one sentence with the values in place.
@@ -2645,6 +2648,75 @@ const APPLIANCE_CSS = `
   .chips .chip ha-icon { --mdc-icon-size: 16px; margin-right: 4px; }
   /* no On / Off button here: the sentence can use the whole width */
   .grp.nobtn > .sent { margin-right: 0; }
+`;
+
+// ---- chargers (a Knit charger shows on the appliance card) ---------------------------------
+/*
+ * A Knit charger (a device on battery kept between two levels from a smart plug) on the same
+ * card: the tile shows its battery (filled to the level) and what it's doing ("Charging · 43% →
+ * 80%", "52% · on under 30%"). Opening it shows the plug (On / Off) and why it's as it is, the
+ * battery and charging state, Automatic with its levels as one sentence ("Charges to [80]% once it
+ * drops under [30]%."), and the Full charge schedule (a Schedule helper: day tabs, a bar of
+ * quarter-hours, tap to change or add a block; read and saved with schedule/list and
+ * schedule/update, which Home Assistant only allows for admin users).
+ *
+ *   settings:                            # optional (YAML): more settings under More controls, any
+ *     - name: Pause and resume           # input_number / number helpers, as sentences: {entity} is a
+ *       icon: mdi:play-pause             # number box, {entity | time} an mm:ss box (in the helper's unit)
+ *       sentence: "The music pauses once the office has been empty for {input_number.x | time} mins."
+ *       hint: ...                        # optional
+ */
+const WEEK = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"];
+const WEEK_SHORT = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+const SLOTS = 96; // quarter-hours in a day
+const slotOf = (t) => {
+  const [h, m] = String(t).split(":").map(Number);
+  return Math.round((h * 60 + m) / 15);
+};
+const slotTime = (s) => `${String(Math.floor((s * 15) / 60)).padStart(2, "0")}:${String((s * 15) % 60).padStart(2, "0")}`;
+// schedule time strings: an end of 24:00 is stored as 24:00:00
+const slotStore = (s) => `${slotTime(s)}:00`;
+// "4am", "4:30pm"; with the day once it isn't today ("Mon 4am")
+const ampm = (d) => `${d.getHours() % 12 || 12}${d.getMinutes() ? `:${String(d.getMinutes()).padStart(2, "0")}` : ""}${d.getHours() < 12 ? "am" : "pm"}`;
+const dayAmpm = (d) => (d.toDateString() === new Date().toDateString() ? ampm(d) : `${WEEK_SHORT[(d.getDay() + 6) % 7]} ${ampm(d)}`);
+// what a charging-state sensor says, in a word
+const chargeWord = (s) =>
+  ({ charging: "Charging", full: "Full", discharging: "Not charging", not_charging: "Not charging", on: "Charging", off: "Not charging" })[s] ||
+  (s ? s.charAt(0).toUpperCase() + s.slice(1).replace(/_/g, " ") : "—");
+const CHARGER_CSS = `
+  .why { font-size: 12px; opacity: 0.8; margin: 2px 0 0 28px; }
+  .grp.nobtn > .note { margin-right: 0; }
+  .grp + .ksch { margin-top: 10px; }
+  /* the full-charge schedule: a day is 96 quarter-hour bars, full height inside a block */
+  .kdays { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 4px; }
+  .kdays .chip { height: 28px; padding: 0; font-size: 11px; position: relative; }
+  .kdays .chip.has::after { content: ""; position: absolute; bottom: 3px; left: 50%; width: 4px; height: 4px; margin-left: -2px; border-radius: 2px; background: currentColor; opacity: 0.7; }
+  .sbar {
+    position: relative; display: grid; grid-template-columns: repeat(${SLOTS}, 1fr); column-gap: 1px; align-items: end;
+    height: 40px; margin-top: 10px; cursor: pointer; border-bottom: 1px solid var(--line);
+  }
+  .sbar i { display: block; height: 4px; border-radius: 2px; background: var(--tint); }
+  .sbar i.b { height: 100%; background: var(--prime); }
+  .sbar i.sel { background: var(--primary-text-color); }
+  .sbar .now { position: absolute; top: -2px; bottom: -2px; width: 2px; border-radius: 1px; background: var(--primary-text-color); opacity: 0.8; pointer-events: none; }
+  .hours { display: grid; grid-template-columns: repeat(8, 1fr); margin-top: 3px; }
+  .hours span { font-size: 10px; opacity: 0.6; font-variant-numeric: tabular-nums; }
+  .shint, .smsg { font-size: 12px; opacity: 0.7; margin-top: 6px; }
+  .smsg.err { color: var(--prime); opacity: 1; }
+  .sedit { margin-top: 10px; border: 1px solid var(--edge); border-radius: min(var(--rc), 12px); padding: 10px; display: flex; flex-direction: column; gap: 10px; }
+  .sedit .shd { display: flex; align-items: center; gap: 8px; }
+  .sedit .shd .title { flex: 1; color: var(--primary-text-color); }
+  .sedit .x {
+    flex: none; width: 28px; height: 28px; border-radius: 14px; border: none; background: none; padding: 0; cursor: pointer;
+    display: flex; align-items: center; justify-content: center; color: var(--secondary-text-color); --mdc-icon-size: 18px;
+  }
+  .stimes { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--secondary-text-color); flex-wrap: wrap; }
+  .stimes input[type="time"] {
+    flex: 1; min-width: 0; font: inherit; font-size: 14px; color: var(--primary-text-color); background: transparent;
+    border: 1px solid var(--soft); border-radius: 8px; padding: 4px 8px; color-scheme: dark;
+  }
+  :host(.light) .stimes input[type="time"] { color-scheme: light; }
+  .sedit .chips { margin-top: 0; }
 `;
 
 class KnitApplianceCard extends HTMLElement {
@@ -2771,6 +2843,8 @@ class KnitApplianceCard extends HTMLElement {
       return;
     }
     this._drawn = true;
+    // a Knit charger: its own look on the same card
+    if (this._isCharger()) return this._chDom();
     const c = this._config;
     const st = this._st(r.status);
     const door = st?.attributes.door;
@@ -2854,6 +2928,463 @@ class KnitApplianceCard extends HTMLElement {
     w?.addEventListener("keydown", (e) => e.key === "Enter" && w.blur());
   }
 
+  // ---- chargers ---------------------------------------------------------------------------
+
+  _isCharger() {
+    return this._st(this._r?.status)?.attributes.kind === "charger";
+  }
+
+  _chDom() {
+    const c = this._config;
+    const r = this._r;
+    const a = this._st(r.status)?.attributes || {};
+    const title = this._title();
+    const pct = (key, label) => `<span class="num"><input type="number" inputmode="decimal" data-n="${key}" aria-label="${esc(label)}"><span class="u">%</span></span>`;
+    const sch = String(a.full_charge || "").startsWith("schedule.");
+    const extras = (c.settings || []).map((x) => this._xSentHtml(x)).join("");
+    this.shadowRoot.innerHTML = `<style>${CSS(colorsOf(c), radiusOf(c))}${APPLIANCE_CSS}${CHARGER_CSS}</style><ha-card>
+      <div class="tile" role="button" tabindex="0" aria-label="${esc(title)}">
+        <div class="face"><div class="fill"></div></div>
+        <div class="ic"><ha-icon icon="${esc(c.icon || "mdi:battery-charging")}"></ha-icon></div>
+        <div class="txt"><div class="n">${esc(title)}</div><div class="s"></div></div>
+        <button class="exp" aria-label="More for ${esc(title)}" aria-expanded="false"><ha-icon icon="mdi:chevron-down"></ha-icon></button>
+      </div>
+      <div class="panel" hidden>
+        <div class="part"><div class="row"><div class="title"><ha-icon icon="mdi:power-plug-outline"></ha-icon><span>Plug</span></div>
+          <div class="end"><button class="offb" data-plug role="switch" aria-label="Plug"></button></div></div>
+          <div class="why"></div></div>
+        <div class="part"><div class="srcs">
+          <div class="tr" data-src="battery"><ha-icon icon="mdi:battery"></ha-icon><span class="tx"><span class="l">Battery</span><span class="v"></span></span></div>
+          ${a.charging ? `<div class="tr" data-src="charging"><ha-icon icon="mdi:battery-charging-outline"></ha-icon><span class="tx"><span class="l">Charging state</span><span class="v"></span></span></div>` : ""}
+        </div></div>
+        <div class="part"><div class="grp" data-g="charge"><div class="title"><ha-icon icon="mdi:battery-sync-outline"></ha-icon><span>Automatic</span></div>
+          <div class="end"><span class="val" data-gv="charge"></span>${r.automatic ? `<button class="offb" data-auto role="switch" aria-label="Automatic"></button>` : ""}</div>
+          <div class="sent">Charges to ${pct("stop_at", "Stop at")} once it drops under ${pct("start_below", "Start below")}.</div>
+          ${a.home ? `<div class="note" data-homenote></div>` : ""}</div></div>
+        ${
+          a.full_charge
+            ? `<div class="part"><div class="grp nobtn" data-g="full"><div class="title"><ha-icon icon="mdi:battery-charging-100"></ha-icon><span>Full charge</span></div>
+          <div class="end"><span class="val" data-fullv></span></div>
+          <div class="note">Charges to 100% ${sch ? "between these times" : "while it's on"}, if it's under ${esc(a.full_below ?? 95)}%.</div></div>
+          ${sch ? `<div class="ksch"></div>` : ""}</div>`
+            : ""
+        }
+        ${
+          extras
+            ? `<div class="part"><button class="xrow" data-ctl aria-expanded="false"><ha-icon icon="mdi:tune-variant"></ha-icon><span class="lb">More controls</span><ha-icon class="chev" icon="mdi:chevron-down"></ha-icon></button>
+          <div class="mset" hidden>${extras}</div></div>`
+            : ""
+        }
+      </div></ha-card>`;
+    this._chBind();
+    this._setOpen(this._open);
+    if (this._ctlOpen && this.$("[data-ctl]")) this._showCtl(true);
+  }
+
+  _chBind() {
+    const r = this._r;
+    const toggle = () => this._setOpen(!this._open, true);
+    this.$(".tile").addEventListener("click", toggle);
+    this.$(".tile").addEventListener("keydown", (e) => {
+      if (e.key === "Enter" || e.key === " ") {
+        e.preventDefault();
+        toggle();
+      }
+    });
+    this.$(".exp").addEventListener("click", (e) => {
+      e.stopPropagation();
+      toggle();
+    });
+    this.$("[data-ctl]")?.addEventListener("click", () => this._showCtl(!this._ctlOpen));
+    // the plug and Automatic: On / Off
+    const flip = (key, id) => {
+      const on = this._hold(key, this._st(id)?.state === "on");
+      this._send(key, !on, "homeassistant", on ? "turn_off" : "turn_on", { entity_id: id });
+    };
+    this.$("[data-plug]").addEventListener("click", () => flip("plug", this._st(r.status)?.attributes.plug));
+    this.$("[data-auto]")?.addEventListener("click", () => flip("auto", r.automatic));
+    // Stop at / Start below: typed, saved snapped to their step
+    this.$$("[data-n]").forEach((inp) => {
+      const id = r[inp.dataset.n];
+      inp.addEventListener("focus", () => inp.select());
+      inp.addEventListener("keydown", (e) => e.key === "Enter" && inp.blur());
+      inp.addEventListener("change", () => {
+        const v = Number(inp.value);
+        if (inp.value === "" || !Number.isFinite(v)) return this._render();
+        this._setNum(id, v);
+      });
+    });
+    this._xBind();
+    const box = this.$(".ksch");
+    if (box) this._schBind(box);
+  }
+
+  // a number entity / helper set to v, snapped to its step and kept in its range
+  _setNum(id, v) {
+    const a = this._st(id)?.attributes || {};
+    const step = Number(a.step) || 1;
+    v = Number(clamp(Math.round(v / step) * step, Number(a.min ?? -Infinity), Number(a.max ?? Infinity)).toFixed(6));
+    this._send(`n:${id}`, v, id.split(".")[0], "set_value", { entity_id: id, value: v });
+  }
+
+  _chRender() {
+    const r = this._r;
+    const st = this._st(r.status);
+    const a = st?.attributes || {};
+    const status = st?.state;
+    const level = Number.isFinite(Number(a.level)) && a.level !== null ? Math.round(Number(a.level)) : undefined;
+    const target = Math.round(Number(a.target));
+    const start = this._hold(`n:${r.start_below}`, Number(this._st(r.start_below)?.state));
+    const stop = this._hold(`n:${r.stop_at}`, Number(this._st(r.stop_at)?.state));
+    const plug = this._st(a.plug);
+    const plugOn = this._hold("plug", plug?.state === "on");
+    const autoOn = this._hold("auto", this._st(r.automatic)?.state === "on");
+    const full = Boolean(a.full);
+    const homeName = a.home ? this._st(a.home)?.attributes.friendly_name || a.home : "";
+    // the tile: the battery, filled to its level, and what it's doing
+    let sub = "No battery reading";
+    if (!st || NO_VALUE.includes(st.state)) sub = "Unavailable";
+    else if (level !== undefined) {
+      sub = {
+        charging: `${full ? "Full charge" : "Charging"} · ${level}% → ${target}%`,
+        not_charging: `${level}% · plug on, not charging`,
+        idle: `${level}% · on under ${num(start)}%`,
+        away: `${level}% · ${homeName ? `${homeName} is out` : "away"}, won't start`,
+        manual: `${level}% · Manual`,
+      }[status] || `${level}%`;
+    }
+    const tile = this.$(".tile");
+    tile.querySelector(".s").textContent = sub;
+    const on = status === "charging";
+    tile.classList.toggle("on", on);
+    this.$("ha-card").classList.toggle("on", on);
+    tile.querySelector(".fill").style.width = level !== undefined ? `${clamp(level, 0, 100)}%` : "0%";
+    if (!this._open) return;
+    // the plug, and why it's as it is
+    const pb = this.$("[data-plug]");
+    pb.classList.toggle("on", plugOn);
+    pb.setAttribute("aria-checked", String(plugOn));
+    this.$(".why").textContent = this._chWhy({ status, level, target, start, plugOn, autoOn, full, homeName, a });
+    // the battery and its charging state
+    const bat = this._st(a.battery);
+    const bEl = this.$('[data-src="battery"]');
+    bEl.querySelector(".v").textContent = level === undefined ? "No reading" : `${level}% · ${ago(bat?.last_updated)}`;
+    bEl.classList.toggle("ok", on);
+    bEl.querySelector("ha-icon").setAttribute("icon", level === undefined ? "mdi:battery-unknown" : `mdi:battery${level >= 95 ? "" : `-${Math.max(10, Math.round(level / 10) * 10)}`}`);
+    const cEl = this.$('[data-src="charging"]');
+    if (cEl) {
+      const cs = this._st(a.charging);
+      cEl.querySelector(".v").textContent = !cs || NO_VALUE.includes(cs.state) ? "Offline" : `${chargeWord(cs.state)} · ${ago(cs.last_changed)}`;
+      cEl.classList.toggle("ok", ["charging", "full", "on"].includes(cs?.state));
+    }
+    // Automatic and its levels
+    const g = this.$('[data-g="charge"]');
+    g.classList.toggle("off", !autoOn);
+    this.$('[data-gv="charge"]').textContent = autoOn ? `${num(start)}–${num(stop)}%` : "";
+    const ab = this.$("[data-auto]");
+    if (ab) {
+      ab.classList.toggle("on", autoOn);
+      ab.setAttribute("aria-checked", String(autoOn));
+    }
+    const hn = this.$("[data-homenote]");
+    if (hn) hn.textContent = `A low battery only turns it on while ${homeName} is home${a.home_now === false ? " (out now)" : ""}.`;
+    const focused = (el) => el.contains(this.shadowRoot.activeElement);
+    this.$$("[data-n]").forEach((inp) => {
+      if (focused(inp)) return;
+      const v = inp.dataset.n === "stop_at" ? stop : start;
+      inp.value = Number.isFinite(v) ? String(v) : "";
+    });
+    // the full charge: Now, or when it next starts
+    const fv = this.$("[data-fullv]");
+    if (fv) {
+      const fs = this._st(a.full_charge);
+      const next = fs?.attributes.next_event ? new Date(fs.attributes.next_event) : undefined;
+      fv.textContent = !fs ? "—" : fs.state === "on" ? "Now" : next ? dayAmpm(next) : "Off";
+    }
+    this._xRender();
+    if (this.$(".ksch")) {
+      // read when opened, and again every few minutes while it's open
+      if (!this._schAt || Date.now() - this._schAt > 5 * 60000) this._schLoad();
+      this._schRender();
+    }
+  }
+
+  _chWhy({ status, level, target, start, plugOn, autoOn, full, homeName, a }) {
+    if (!autoOn) return "Automatic is off: the plug is left as it is.";
+    if (level === undefined) return "No battery reading, so it can't tell when to charge.";
+    if (plugOn) {
+      if (status === "not_charging") return `On, but it isn't charging (off its dock, or not reporting). It goes off at ${target}% once it's seen charging.`;
+      return `Charging to ${target}%${full ? " (full charge)" : ""}, then it turns off.`;
+    }
+    if (a.home && a.home_now === false && level < start) return `Stays off until ${homeName} is home.`;
+    return `Turns on when it drops under ${num(start)}%.`;
+  }
+
+  // ---- more settings, as sentences (any input_number / number) ------------------------------
+
+  _xSentHtml(x) {
+    const parts = String(x.sentence || "").split(/\{([^}]+)\}/);
+    const input = (tok) => {
+      const [id, kind] = tok.split("|").map((t) => t.trim());
+      return kind === "time"
+        ? `<span class="tin" data-xt="${esc(id)}"><span class="tbox"><input class="mm" type="number" inputmode="numeric" min="0" data-tm aria-label="Minutes"><span class="colon">:</span><input type="number" inputmode="numeric" min="0" max="59" data-ts aria-label="Seconds"></span></span>`
+        : `<span class="num"><input type="number" inputmode="decimal" data-xn="${esc(id)}"></span>`;
+    };
+    return `<div class="grp nobtn"><div class="title"><ha-icon icon="${esc(x.icon || "mdi:tune-variant")}"></ha-icon><span>${esc(x.name || "")}</span></div><div class="end"></div>
+      <div class="sent">${parts.map((p, i) => (i % 2 ? input(p) : esc(p))).join("")}</div>
+      ${x.hint ? `<div class="note">${esc(x.hint)}</div>` : ""}</div>`;
+  }
+
+  // seconds per unit of a time helper (s, min or h; seconds when it has none)
+  _secsPer(id) {
+    return UNIT_SECS[this._st(id)?.attributes.unit_of_measurement] || 1;
+  }
+
+  _xBind() {
+    this.$$("[data-xn]").forEach((inp) => {
+      inp.addEventListener("focus", () => inp.select());
+      inp.addEventListener("keydown", (e) => e.key === "Enter" && inp.blur());
+      inp.addEventListener("change", () => {
+        const v = Number(inp.value);
+        if (inp.value === "" || !Number.isFinite(v)) return this._render();
+        this._setNum(inp.dataset.xn, v);
+      });
+    });
+    // mm:ss; 75 seconds typed is 1:15; ↑ / ↓ step the part in focus
+    this.$$("[data-xt]").forEach((box) => {
+      const id = box.dataset.xt;
+      const mm = box.querySelector("[data-tm]");
+      const ss = box.querySelector("[data-ts]");
+      const secs = () => Math.max(0, Math.floor(Number(mm.value) || 0)) * 60 + Math.max(0, Math.floor(Number(ss.value) || 0));
+      const show = (t) => {
+        mm.value = String(Math.floor(t / 60)).padStart(2, "0");
+        ss.value = String(t % 60).padStart(2, "0");
+      };
+      const commit = () => {
+        const t = secs();
+        show(t);
+        this._setNum(id, t / this._secsPer(id));
+      };
+      [mm, ss].forEach((inp) => {
+        inp.addEventListener("focus", () => inp.select());
+        inp.addEventListener("change", commit);
+        inp.addEventListener("keydown", (e) => {
+          if (e.key === "Enter") inp.blur();
+          const dir = { ArrowUp: 1, ArrowDown: -1 }[e.key];
+          if (!dir) return;
+          e.preventDefault();
+          show(Math.max(0, secs() + dir * (inp === mm ? 60 : 1)));
+          inp.select();
+          commit();
+        });
+      });
+    });
+  }
+
+  _xRender() {
+    const active = this.shadowRoot.activeElement;
+    this.$$("[data-xn]").forEach((inp) => {
+      const id = inp.dataset.xn;
+      const st = this._st(id);
+      inp.setAttribute("aria-label", st?.attributes.friendly_name || id);
+      if (!st || inp === active) return;
+      const v = this._hold(`n:${id}`, Number(st.state));
+      if (Number.isFinite(v)) inp.value = String(v);
+    });
+    this.$$("[data-xt]").forEach((box) => {
+      const id = box.dataset.xt;
+      const st = this._st(id);
+      if (!st || box.contains(active)) return;
+      const v = this._hold(`n:${id}`, Number(st.state));
+      if (!Number.isFinite(v)) return;
+      const t = Math.round(v * this._secsPer(id));
+      box.querySelector("[data-tm]").value = String(Math.floor(t / 60)).padStart(2, "0");
+      box.querySelector("[data-ts]").value = String(t % 60).padStart(2, "0");
+    });
+  }
+
+  // ---- the full-charge schedule (a Schedule helper), as the Home heating card's ---------------
+
+  _schEntity() {
+    return this._st(this._r.status)?.attributes.full_charge;
+  }
+
+  async _schLoad() {
+    if (this._schBusy) return;
+    this._schAt = Date.now();
+    try {
+      // by its storage id (its registry unique id): an entity id renamed since it was made keeps its first id
+      if (!this._schUid) {
+        const reg = await this._hass.callWS({ type: "config/entity_registry/get", entity_id: this._schEntity() }).catch(() => undefined);
+        this._schUid = reg?.unique_id;
+      }
+      const all = await this._hass.callWS({ type: "schedule/list" });
+      const id = this._schUid || this._schEntity().split(".")[1];
+      this._sch = all.find((x) => x.id === id);
+      this._schErr = this._sch ? "" : `Couldn't find ${this._schEntity()}.`;
+    } catch (e) {
+      this._schErr = `Couldn't read the schedule (${e.message || e.code || e}). Editing it needs an admin user.`;
+    }
+    this._schRender();
+  }
+
+  _schBlocks(day) {
+    return (this._sch?.[WEEK[day]] || []).map((b) => ({ from: slotOf(b.from), to: slotOf(b.to) || SLOTS })).sort((x, y) => x.from - y.from);
+  }
+
+  _schDayNow() {
+    if (this._schDay === undefined) this._schDay = (new Date().getDay() + 6) % 7;
+    return this._schDay;
+  }
+
+  _schHtml() {
+    const day = this._schDayNow();
+    const ed = this._schEdit && this._schEdit.day === day ? this._schEdit : undefined;
+    const tabs = `<div class="kdays" role="tablist">${WEEK_SHORT.map(
+      (d, i) =>
+        `<button class="chip ${i === day ? "on" : ""} ${this._schBlocks(i).length ? "has" : ""}" role="tab" aria-selected="${i === day}" data-sday="${i}">${d}</button>`
+    ).join("")}</div>`;
+    if (!this._sch) return `${tabs}<div class="smsg ${this._schErr ? "err" : ""}">${esc(this._schErr || "Loading…")}</div>`;
+    const blocks = this._schBlocks(day);
+    const now = new Date();
+    const cells = [];
+    for (let s = 0; s < SLOTS; s++) {
+      const b = blocks.some((x) => s >= x.from && s < x.to);
+      const sel = ed && s >= ed.from && s < ed.to;
+      cells.push(`<i data-slot="${s}" class="${[b || sel ? "b" : "", sel ? "sel" : ""].filter(Boolean).join(" ")}" title="${slotTime(s)}"></i>`);
+    }
+    const nowMark = day === (now.getDay() + 6) % 7 ? `<span class="now" style="left:${(((now.getHours() * 60 + now.getMinutes()) / 1440) * 100).toFixed(2)}%"></span>` : "";
+    const editor = ed
+      ? `<div class="sedit">
+          <div class="shd"><div class="title">${WEEK_SHORT[day]} · ${slotTime(ed.from)}–${slotTime(ed.to % SLOTS)}</div>
+            <button class="x" data-es="close" aria-label="Close"><ha-icon icon="mdi:close"></ha-icon></button></div>
+          <div class="stimes">From <input type="time" step="900" data-ef value="${slotTime(ed.from)}" aria-label="From"> to <input type="time" step="900" data-et value="${slotTime(ed.to % SLOTS)}" aria-label="To"></div>
+          <div class="chips" style="--cols: 2"><button class="chip" data-es="all">Same every day</button><button class="chip" data-es="del">Delete</button></div>
+        </div>`
+      : "";
+    return `${tabs}
+      <div class="sbar">${cells.join("")}${nowMark}</div>
+      <div class="hours">${[0, 3, 6, 9, 12, 15, 18, 21].map((h) => `<span>${h}</span>`).join("")}</div>
+      <div class="shint">${blocks.length ? "Tap a block to change it, or a gap to add one." : "No full charge this day. Tap a time to add one."}</div>
+      ${editor}
+      ${this._schMsg ? `<div class="smsg ${this._schMsg.startsWith("Couldn't") ? "err" : ""}">${esc(this._schMsg)}</div>` : ""}`;
+  }
+
+  _schRender() {
+    const box = this.$(".ksch");
+    if (!box) return;
+    // not while a time is being typed
+    if (box.contains(this.shadowRoot.activeElement) && this.shadowRoot.activeElement.matches("input[type=time]")) return;
+    const html = this._schHtml();
+    if (box.dataset.html !== html) {
+      box.dataset.html = html;
+      box.innerHTML = html;
+    }
+  }
+
+  _schBind(box) {
+    box.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const tab = e.target.closest("[data-sday]");
+      if (tab) {
+        this._schEdit = undefined;
+        this._schMsg = "";
+        this._schDay = Number(tab.dataset.sday);
+        return this._schRender();
+      }
+      const day = this._schDayNow();
+      const cell = e.target.closest("[data-slot]");
+      if (cell && this._sch) {
+        const s = Number(cell.dataset.slot);
+        const ed = this._schEdit;
+        this._schMsg = "";
+        // tapping the open block again closes it
+        if (ed && ed.day === day && s >= ed.from && s < ed.to) {
+          this._schEdit = undefined;
+          return this._schRender();
+        }
+        const blocks = this._schBlocks(day);
+        const b = blocks.find((x) => s >= x.from && s < x.to);
+        if (b) this._schEdit = { day, orig: b.from, from: b.from, to: b.to };
+        else {
+          // a new hour (up to the next block), saved straight away
+          const next = blocks.find((x) => x.from > s);
+          this._schEdit = { day, orig: undefined, from: s, to: Math.min(s + 4, next ? next.from : SLOTS) };
+          this._schSaveEdit();
+        }
+        return this._schRender();
+      }
+      const act = e.target.closest("[data-es]")?.dataset.es;
+      if (act === "close") this._schEdit = undefined;
+      if (act === "del" && this._schEdit) {
+        this._schSaveEdit(true);
+        this._schEdit = undefined;
+      }
+      if (act === "all" && this._schEdit) {
+        const blocks = this._schBlocks(day);
+        this._schMsg = `${WEEK_SHORT[day]}'s times copied to every day.`;
+        this._schWrite(() => Object.fromEntries(WEEK.map((d) => [d, blocks.map((x) => ({ from: slotStore(x.from), to: slotStore(x.to) }))])));
+      }
+      if (act) this._schRender();
+    });
+    // a time saves once it's picked
+    box.addEventListener("change", (e) => {
+      if (!e.target.matches("[data-ef], [data-et]") || !this._schEdit) return;
+      const f = box.querySelector("[data-ef]")?.value;
+      const t = box.querySelector("[data-et]")?.value;
+      if (/^\d{2}:\d{2}/.test(f || "")) this._schEdit.from = slotOf(f);
+      if (/^\d{2}:\d{2}/.test(t || "")) this._schEdit.to = slotOf(t) || SLOTS;
+      e.target.blur();
+      this._schSaveEdit();
+      this._schRender();
+    });
+  }
+
+  // save the open block (remove: delete it); every write builds on the one before
+  _schSaveEdit(remove = false) {
+    const ed = this._schEdit;
+    if (!ed) return;
+    if (!remove && ed.to <= ed.from) {
+      this._schMsg = "Couldn't save: the end has to be after the start.";
+      return;
+    }
+    const others = this._schBlocks(ed.day).filter((b) => b.from !== ed.orig);
+    if (!remove && others.some((b) => ed.from < b.to && ed.to > b.from)) {
+      this._schMsg = "Couldn't save: that overlaps another block.";
+      return;
+    }
+    const snap = { ...ed };
+    if (!remove) ed.orig = ed.from;
+    this._schWrite((sch) =>
+      Object.fromEntries(
+        WEEK.map((d, i) => {
+          let blocks = (sch[d] || []).map((b) => ({ from: slotOf(b.from), to: slotOf(b.to) || SLOTS }));
+          if (i === snap.day) {
+            blocks = blocks.filter((b) => b.from !== snap.orig);
+            if (!remove) blocks.push({ from: snap.from, to: snap.to });
+          }
+          return [d, blocks.sort((x, y) => x.from - y.from).map((b) => ({ from: slotStore(b.from), to: slotStore(b.to) }))];
+        })
+      )
+    );
+  }
+
+  _schWrite(build) {
+    this._schQ = (this._schQ || Promise.resolve()).then(async () => {
+      const sch = this._sch;
+      if (!sch) return;
+      this._schBusy = true;
+      try {
+        this._sch = await this._hass.callWS({ type: "schedule/update", schedule_id: sch.id, name: sch.name, ...(sch.icon ? { icon: sch.icon } : {}), ...build(sch) });
+      } catch (e) {
+        this._schMsg = `Couldn't save: ${e.message || e.code || e}`;
+      } finally {
+        this._schBusy = false;
+        this._schRender();
+      }
+    });
+  }
+
   _setOpen(open, byUser) {
     this._open = open;
     OPEN.set(this._config.device, { open, ctl: this._ctlOpen });
@@ -2880,6 +3411,7 @@ class KnitApplianceCard extends HTMLElement {
     if (!this._hass || !this._drawn) return;
     // light or dark shades, as the light card picks them
     SmartLightCard.prototype._theme.call(this);
+    if (this._isCharger()) return this._chRender();
     const r = this._r;
     const st = this._st(r.status);
     const status = this._hold("status", st?.state);
@@ -3017,7 +3549,7 @@ if (!window.customCards.some((c) => c.type === "knit-appliance-card"))
   window.customCards.push({
     type: "knit-appliance-card",
     name: "Knit Appliance Card",
-    description: "A Knit appliance (dishwasher, washing machine): status, cycle countdown, corrections and its detection settings.",
+    description: "A Knit appliance (dishwasher, washing machine) or charger: status, cycle countdown or battery, and its settings.",
   });
 if (!window.customCards.some((c) => c.type === "knit-section"))
   window.customCards.push({

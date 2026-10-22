@@ -7,7 +7,8 @@
         "menu_options": {
           "light": "Light: on and off from your sensors (motion, door, vibration) and the light level",
           "auto_off_switch": "Motion-controlled device: off once its sensors clear (they never turn it on)",
-          "appliance": "Appliance: running / full / empty from its power (a dishwasher, a washing machine)"
+          "appliance": "Appliance: running / full / empty from its power (a dishwasher, a washing machine)",
+          "charger": "Charger: a device on battery, kept between two levels from its smart plug"
         }
       },
       "light": {
@@ -103,6 +104,37 @@
               "empty_name": "Its status once emptied (and before the first cycle).",
               "running_name": "Its status while a cycle runs.",
               "full_name": "Its status once a cycle has finished, until it's emptied."
+            }
+          }
+        }
+      },
+      "charger": {
+        "title": "Charger",
+        "description": "A device on battery (a music player, a tablet) charged from a smart plug: Knit keeps its battery between two levels.",
+        "data": {
+          "name": "Name",
+          "battery": "Battery level (%)",
+          "plug": "Plug it charges from",
+          "charging": "Charging state"
+        },
+        "data_description": {
+          "battery": "The device's battery: the plug goes on once it drops under Start below, and off at Stop at.",
+          "plug": "The smart plug (or its switch) the device charges from.",
+          "charging": "Optional, a sensor that says charging / full (or on while charging). The plug only goes off at Stop at once the device is seen charging, so an old reading from a device that's off the network never turns it off."
+        },
+        "sections": {
+          "advanced": {
+            "name": "Advanced options",
+            "description": "A full charge on a schedule, and only starting while someone's home.",
+            "data": {
+              "full_charge": "Charge to 100% while this is on",
+              "home": "Only start while this is home",
+              "start_on": "Turn Automatic on now"
+            },
+            "data_description": {
+              "full_charge": "A schedule (or any on / off entity): inside its times it charges to 100%, if it's under 95%.",
+              "home": "A person (or any home / on entity): a low battery only turns the plug on while they're home. A charge already going carries on to Stop at.",
+              "start_on": "Turn this off if an automation already runs the plug, so the two don't both act on it."
             }
           }
         }
@@ -209,6 +241,34 @@
             }
           }
         }
+      },
+      "charger": {
+        "title": "Charger settings",
+        "description": "A device on battery charged from a smart plug.",
+        "data": {
+          "plug": "Plug it charges from",
+          "charging": "Charging state"
+        },
+        "data_description": {
+          "plug": "The smart plug (or its switch) the device charges from.",
+          "charging": "Optional, a sensor that says charging / full (or on while charging). The plug only goes off at Stop at once the device is seen charging, so an old reading from a device that's off the network never turns it off."
+        },
+        "sections": {
+          "advanced": {
+            "name": "Advanced options",
+            "description": "A full charge on a schedule, only starting while someone's home, and moving it to another battery.",
+            "data": {
+              "full_charge": "Charge to 100% while this is on",
+              "home": "Only start while this is home",
+              "battery": "Move to another battery level sensor"
+            },
+            "data_description": {
+              "full_charge": "A schedule (or any on / off entity): inside its times it charges to 100%, if it's under 95%.",
+              "home": "A person (or any home / on entity): a low battery only turns the plug on while they're home. A charge already going carries on to Stop at.",
+              "battery": "Its settings, entities and cards move with it."
+            }
+          }
+        }
       }
     },
     "error": {
@@ -227,6 +287,9 @@
       },
       "auto_off": {
         "name": "Motion control"
+      },
+      "automatic": {
+        "name": "Automatic"
       }
     },
     "number": {
@@ -259,6 +322,12 @@
       },
       "empty_after": {
         "name": "Emptied after door open"
+      },
+      "stop_at": {
+        "name": "Stop at"
+      },
+      "start_below": {
+        "name": "Start below"
       }
     },
     "binary_sensor": {
@@ -284,6 +353,17 @@
       },
       "cycle_ends": {
         "name": "Cycle ends"
+      },
+      "status": {
+        "name": "Status",
+        "state": {
+          "charging": "Charging",
+          "not_charging": "Not charging",
+          "idle": "Idle",
+          "away": "Away",
+          "manual": "Manual",
+          "no_reading": "No reading"
+        }
       }
     },
     "select": {

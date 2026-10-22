@@ -1,4 +1,4 @@
-"""Motion and Light level: the switches that turn each feature on or off.
+"""Motion and Light level: the switches that turn each feature on or off (and a charger's Automatic).
 
 Motion control: with it on, presence turns the light on and the room being empty for the
 Motion timeout turns it off.
@@ -13,10 +13,10 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.restore_state import RestoreEntity
 
-from .const import CONF_START_ON, DOMAIN, ROLE_LIGHT_LEVEL, ROLE_MOTION, SETTING, TYPE_APPLIANCE, TYPE_SWITCH
+from .const import CONF_START_ON, DOMAIN, ROLE_AUTOMATIC, ROLE_LIGHT_LEVEL, ROLE_MOTION, SETTING, TYPE_APPLIANCE, TYPE_CHARGER, TYPE_SWITCH
 from .entity import KnitEntity, features, kind
 
-ICONS = {ROLE_MOTION: "mdi:motion-sensor", ROLE_LIGHT_LEVEL: "mdi:theme-light-dark"}
+ICONS = {ROLE_MOTION: "mdi:motion-sensor", ROLE_LIGHT_LEVEL: "mdi:theme-light-dark", ROLE_AUTOMATIC: "mdi:battery-sync-outline"}
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, add: AddEntitiesCallback) -> None:
@@ -24,6 +24,10 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, add: AddEnt
         return
     controller = hass.data[DOMAIN][entry.entry_id]
     start_on = entry.data.get(CONF_START_ON, True)
+    # a charger: Automatic (off: the plug is left as it is)
+    if kind(entry) == TYPE_CHARGER:
+        add([FeatureSwitch(entry, controller, ROLE_AUTOMATIC, start_on)])
+        return
     motion, level = features(entry)
     roles = [r for r, has in ((ROLE_MOTION, motion), (ROLE_LIGHT_LEVEL, level)) if has]
     add([FeatureSwitch(entry, controller, r, start_on) for r in roles])

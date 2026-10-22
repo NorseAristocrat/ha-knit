@@ -1,5 +1,5 @@
 """Countdowns (when the motion timeout, the off-when-light and an appliance's cycle end), the light
-level a light judges, and the light a device runs (for the card)."""
+level a light judges, the light a device runs (for the card), and a charger's status."""
 
 from __future__ import annotations
 
@@ -13,7 +13,8 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.restore_state import RestoreEntity
 from homeassistant.util import dt as dt_util
 
-from .const import DOMAIN, ROLE_AUTO_OFF_ENDS, ROLE_CYCLE_ENDS, ROLE_ILLUMINANCE, ROLE_LIGHT, ROLE_OFF_WHEN_LIGHT_ENDS, TYPE_APPLIANCE
+from .charger import STATUSES as CHARGER_STATUSES
+from .const import DOMAIN, ROLE_AUTO_OFF_ENDS, ROLE_CYCLE_ENDS, ROLE_ILLUMINANCE, ROLE_LIGHT, ROLE_OFF_WHEN_LIGHT_ENDS, ROLE_STATUS, TYPE_APPLIANCE, TYPE_CHARGER
 from .engine import Countdown
 from .entity import KnitEntity, LiveEntity, features, kind
 
@@ -22,6 +23,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, add: AddEnt
     controller = hass.data[DOMAIN][entry.entry_id]
     if kind(entry) == TYPE_APPLIANCE:
         add([CycleEnds(entry, controller, ROLE_CYCLE_ENDS)])
+        return
+    if kind(entry) == TYPE_CHARGER:
+        add([ChargerStatus(entry, controller, ROLE_STATUS)])
         return
     motion, level = features(entry)
     ends = ([Ends(entry, controller, ROLE_AUTO_OFF_ENDS)] if motion else []) + ([Ends(entry, controller, ROLE_OFF_WHEN_LIGHT_ENDS)] if level else [])
@@ -141,3 +145,49 @@ class CycleEnds(LiveEntity, RestoreSensor):
         if e.cycle_ends and e.cycle_total:
             attrs["duration"] = str(timedelta(seconds=round(e.cycle_total)))
         return attrs
+
+
+CHARGER_ICONS = {
+    "charging": "mdi:battery-charging",
+    "not_charging": "mdi:battery-alert-variant-outline",
+    "idle": "mdi:battery-outline",
+    "away": "mdi:battery-clock-outline",
+    "manual": "mdi:hand-back-right-outline",
+    "no_reading": "mdi:battery-unknown",
+}
+
+
+class ChargerStatus(LiveEntity, SensorEntity):
+    """What a charger is doing: Charging, Not charging, Idle, Away, Manual or No reading, with
+    what the card needs (its entities, the levels it works to)."""
+
+    _platform = "sensor"
+    _attr_device_class = SensorDeviceClass.ENUM
+    _attr_options = CHARGER_STATUSES
+
+    @property
+    def native_value(self) -> str:
+        return self.controller.engine.status()
+
+    @property
+    def icon(self) -> str:
+        return CHARGER_ICONS.get(self.native_value, "mdi:battery")
+
+    @property
+    def extra_state_attributes(self) -> dict:
+        c = self.controller
+        e = c.engine
+        return {
+            **super().extra_state_attributes,
+            "kind": "charger",
+            "battery": c.battery,
+            "plug": c.plug,
+            "charging": c.charging,
+            "full_charge": c.full_charge,
+            "home": c.home,
+            "level": e.level,
+            "target": e.target(),
+            "full": e.full,
+            "home_now": e.home,
+            "full_below": e.settings.full_below,
+        }

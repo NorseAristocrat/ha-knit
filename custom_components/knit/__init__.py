@@ -1,4 +1,4 @@
-"""Knit: knit your sensors into smart devices (lights, motion-controlled devices, appliances), with cards."""
+"""Knit: knit your sensors into smart devices (lights, motion-controlled devices, appliances, chargers), with cards."""
 
 from __future__ import annotations
 
@@ -13,7 +13,8 @@ from homeassistant.helpers.typing import ConfigType
 from homeassistant.loader import async_get_integration
 
 from .appliance_controller import ApplianceController
-from .const import CARD_FILE, CARD_URL, CONF_TYPE, DOMAIN, TYPE_APPLIANCE
+from .charger_controller import ChargerController
+from .const import CARD_FILE, CARD_URL, CONF_TYPE, DOMAIN, TYPE_APPLIANCE, TYPE_CHARGER
 from .controller import LightController
 from .entity import expected_roles
 
@@ -64,6 +65,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     conf = {**entry.data, **entry.options}
     if entry.data.get(CONF_TYPE) == TYPE_APPLIANCE:
         controller = ApplianceController(hass, entry.entry_id, entry.title, conf)
+    elif entry.data.get(CONF_TYPE) == TYPE_CHARGER:
+        controller = ChargerController(hass, entry.entry_id, entry.title, conf)
     else:
         controller = LightController(hass, entry.entry_id, conf)
     hass.data.setdefault(DOMAIN, {})[entry.entry_id] = controller

@@ -7,6 +7,7 @@ CONF_TYPE = "type"
 TYPE_LIGHT = "light"  # motion control (with dim) and light level
 TYPE_SWITCH = "auto_off_switch"  # a motion-controlled device: off once the room is empty, never turned on
 TYPE_APPLIANCE = "appliance"  # a dishwasher, a washing machine: status from power and the door
+TYPE_CHARGER = "charger"  # a device on battery charged from a smart plug: kept between two levels
 
 # config entry data / options
 CONF_LIGHT = "light"  # lights and motion-controlled devices: the light / switch it runs
@@ -21,6 +22,11 @@ CONF_START_ON = "start_on"  # turn the automatic features on when it's set up
 CONF_OFF_AFTER_OUTAGE = "off_after_outage"  # motion-controlled device: off again if it comes back on after a power cut
 CONF_POWER = "power"  # appliance: its plug's power sensor (W)
 CONF_DOOR = "door"  # appliance: its door sensor (on = open)
+CONF_BATTERY = "battery"  # charger: the device's battery level (%)
+CONF_PLUG = "plug"  # charger: the smart plug (switch) it charges from
+CONF_CHARGING = "charging"  # charger: the device's own charging state (a sensor: charging / full, or on / off)
+CONF_FULL_CHARGE = "full_charge"  # charger: while this is on (a schedule), it charges to 100%
+CONF_HOME = "home"  # charger: it's only turned on for a low battery while this is home / on
 
 # the role of each entity, as an attribute the card finds them by
 ATTR_DEVICE = "knit"  # the entity the device runs (a light), or its status (an appliance)
@@ -49,6 +55,10 @@ ROLE_FINISHED_AFTER = "finished_after"
 ROLE_CYCLE_LENGTH = "cycle_length"
 ROLE_EMPTY_AFTER = "empty_after"
 ROLE_CYCLE_ENDS = "cycle_ends"
+# chargers (their Status sensor has role "status" too)
+ROLE_STOP_AT = "stop_at"
+ROLE_START_BELOW = "start_below"
+ROLE_AUTOMATIC = "automatic"
 
 # settings in the engines, by role
 SETTING = {
@@ -64,6 +74,9 @@ SETTING = {
     ROLE_FINISHED_AFTER: "finished_after",
     ROLE_CYCLE_LENGTH: "cycle_secs",
     ROLE_EMPTY_AFTER: "empty_after",
+    ROLE_STOP_AT: "stop_at",
+    ROLE_START_BELOW: "start_below",
+    ROLE_AUTOMATIC: "automatic",
 }
 
 # fired for an appliance: {"device": name, "entry_id": ..., "status": ...}

@@ -6,7 +6,7 @@ from dataclasses import dataclass
 
 from homeassistant.components.number import NumberMode, RestoreNumber
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import LIGHT_LUX, EntityCategory, UnitOfPower, UnitOfTime
+from homeassistant.const import LIGHT_LUX, PERCENTAGE, EntityCategory, UnitOfPower, UnitOfTime
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
@@ -19,6 +19,9 @@ from .const import (
     ROLE_RUNNING_ABOVE,
     ROLE_RUNNING_AFTER,
     TYPE_APPLIANCE,
+    TYPE_CHARGER,
+    ROLE_START_BELOW,
+    ROLE_STOP_AT,
     ROLE_DARK_BELOW,
     ROLE_DIM_TIME,
     ROLE_LIGHT_ABOVE,
@@ -51,6 +54,10 @@ APPLIANCE = [
     Spec(ROLE_CYCLE_LENGTH, UnitOfTime.SECONDS, 0, 21600, 60, 7200, "mdi:timer-outline"),
     Spec(ROLE_EMPTY_AFTER, UnitOfTime.SECONDS, 0, 600, 1, 60, "mdi:door-open"),
 ]
+CHARGER = [
+    Spec(ROLE_STOP_AT, PERCENTAGE, 5, 100, 5, 80, "mdi:battery-80"),
+    Spec(ROLE_START_BELOW, PERCENTAGE, 0, 95, 5, 30, "mdi:battery-30"),
+]
 LEVELS = [
     Spec(ROLE_DARK_BELOW, LIGHT_LUX, 0, 2000, 0.1, 10, "mdi:weather-sunset-down"),
     Spec(ROLE_LIGHT_ABOVE, LIGHT_LUX, 0, 2000, 0.1, 15, "mdi:weather-sunny"),
@@ -61,6 +68,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, add: AddEnt
     controller = hass.data[DOMAIN][entry.entry_id]
     if kind(entry) == TYPE_APPLIANCE:
         add([Setting(entry, controller, s) for s in APPLIANCE])
+        return
+    if kind(entry) == TYPE_CHARGER:
+        add([Setting(entry, controller, s) for s in CHARGER])
         return
     motion, level = features(entry)
     specs = list(MOTION) if motion else []
