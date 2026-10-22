@@ -67,7 +67,7 @@
  *   collapse_others: false                   # optional: opening this card leaves the others open
  */
 
-const SLC_VERSION = "49";
+const SLC_VERSION = "50";
 const PENDING_MS = 8000;
 const RING = 2 * Math.PI * 19;
 // which cards are open (and their More controls), so a redraw (as the editor does) keeps it
@@ -2664,6 +2664,10 @@ const APPLIANCE_CSS = `
  *     session: sensor.x_media_session    # next (an Android phone or player with the Home Assistant app: its
  *     notify: notify.mobile_app_x        # Media session sensor, and its notify action for command_media)
  *     art: image.x_cover_art             # optional: the song's cover (an image entity), as the hero's backdrop
+ *     now_playing: sensor.x_now_playing  # optional: the song from elsewhere (a music server): title as its state,
+ *                                        # artist, album, duration (s), started; used whenever it has one, as
+ *                                        # it's right when the device's app has stopped reporting
+ *     app: com.example.player            # optional: the app the controls go to when the session names none
  *   timers:                              # optional: countdowns shown on the tile while they run, first
  *     - entity: timer.office_music_pause # ("Music pauses in 0:04 · 47% ..."), the ring draining round the icon
  *       label: Music pauses in
@@ -3088,7 +3092,7 @@ class KnitApplianceCard extends HTMLElement {
     this.$$("[data-mc]").forEach((b) =>
       b.addEventListener("click", () => {
         const m = this._media();
-        if (!m) return;
+        if (!m?.app) return;
         let cmd = b.dataset.mc;
         if (cmd === "play_pause") {
           cmd = m.playing ? "pause" : "play";
@@ -3225,23 +3229,47 @@ class KnitApplianceCard extends HTMLElement {
     }
   }
 
-  // what's playing: the app that's Playing (else the first Paused one) on the media session sensor
+  // what's playing. The device's media session sensor: the app that's Playing (else the first
+  // Paused one), its state, song and position. A now_playing sensor (a music server) gives the song
+  // whenever it has one, and the session is only trusted for its state while it names the same song
   _media() {
-    const st = this._st(this._config.media?.session);
-    if (!st) return undefined;
-    const apps = Object.keys(st.attributes)
-      .filter((k) => k.startsWith("playback_state_"))
-      .map((k) => ({ app: k.slice(15), state: st.attributes[k] }));
+    const m = this._config.media || {};
+    const st = this._st(m.session);
+    const apps = st
+      ? Object.keys(st.attributes)
+          .filter((k) => k.startsWith("playback_state_"))
+          .map((k) => ({ app: k.slice(15), state: st.attributes[k] }))
+      : [];
     const pick = apps.find((x) => x.state === "Playing") || apps.find((x) => x.state === "Paused");
-    if (!pick) return undefined;
-    const at = (k) => st.attributes[`${k}_${pick.app}`];
-    const state = this._hold("media", pick.state);
-    // the position when it last reported, moved on since if it's playing
-    const dur = Number(at("duration")) / 1000;
-    let pos = Number(at("playback_position")) / 1000;
-    if (state === "Playing" && Number.isFinite(pos)) pos += (Date.now() - Date.parse(st.last_updated)) / 1000;
+    const at = (k) => (pick ? st.attributes[`${k}_${pick.app}`] : undefined);
+    const np = this._st(m.now_playing);
+    const server = np && !NO_VALUE.includes(np.state) && np.state !== "none" ? np : undefined;
+    if (!pick && !server) return undefined;
+    const same = pick && (!server || String(at("title") || "").toLowerCase() === server.state.toLowerCase());
+    // the session's state while it's about this song; else playing (the server lists it)
+    const state = this._hold("media", same ? pick.state : "Playing");
+    let dur, pos;
+    if (same) {
+      // the position when it last reported, moved on since if it's playing
+      dur = Number(at("duration")) / 1000;
+      pos = Number(at("playback_position")) / 1000;
+      if (state === "Playing" && Number.isFinite(pos)) pos += (Date.now() - Date.parse(st.last_updated)) / 1000;
+    } else {
+      dur = Number(server.attributes.duration);
+      pos = (Date.now() - Date.parse(server.attributes.started)) / 1000;
+    }
     if (Number.isFinite(dur) && dur > 0) pos = clamp(pos, 0, dur);
-    return { app: pick.app, state, playing: state === "Playing", title: at("title"), artist: at("artist"), album: at("album"), pos, dur };
+    const a = server?.attributes || {};
+    return {
+      app: pick?.app || m.app,
+      state,
+      playing: state === "Playing",
+      title: server ? server.state : at("title"),
+      artist: server ? a.artist : at("artist"),
+      album: server ? a.album : at("album"),
+      pos,
+      dur,
+    };
   }
 
   _npRender() {
