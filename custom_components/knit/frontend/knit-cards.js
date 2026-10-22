@@ -67,7 +67,7 @@
  *   collapse_others: false                   # optional: opening this card leaves the others open
  */
 
-const SLC_VERSION = "47";
+const SLC_VERSION = "48";
 const PENDING_MS = 8000;
 const RING = 2 * Math.PI * 19;
 // which cards are open (and their More controls), so a redraw (as the editor does) keeps it
@@ -2673,6 +2673,7 @@ const APPLIANCE_CSS = `
  *       icon: mdi:play-pause             # number box, {entity | time} an mm:ss box (in the helper's unit)
  *       sentence: "The music pauses once the office has been empty for {input_number.x | time} mins."
  *       hint: ...                        # optional
+ *       tab: Music                       # optional: its More controls tab (Settings unless given)
  */
 const WEEK = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"];
 const WEEK_SHORT = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
@@ -2697,6 +2698,11 @@ const chargeWord = (s) =>
 const CHARGER_CSS = `
   .why { font-size: 12px; opacity: 0.8; margin: 2px 0 0 28px; }
   .grp.nobtn > .note { margin-right: 0; }
+  /* More controls' tabs: one row of chips, the picked one filled; under it its pane */
+  .ktabs { display: grid; grid-template-columns: repeat(var(--cols, 3), minmax(0, 1fr)); gap: 6px; margin-bottom: 12px; }
+  .ktabs .chip { height: 30px; font-size: 12px; }
+  .ksrcs { margin: 10px 0 0; }
+  .kgrp { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--line); }
   /* now playing: the song, then previous / play-pause / next */
   .np { display: flex; align-items: center; gap: 10px; margin: 2px 0 0 28px; min-width: 0; }
   .np .tx { flex: 1; min-width: 0; display: flex; flex-direction: column; }
@@ -2961,7 +2967,38 @@ class KnitApplianceCard extends HTMLElement {
     const title = this._title();
     const pct = (key, label) => `<span class="num"><input type="number" inputmode="decimal" data-n="${key}" aria-label="${esc(label)}"><span class="u">%</span></span>`;
     const sch = String(a.full_charge || "").startsWith("schedule.");
-    const extras = (c.settings || []).map((x) => this._xSentHtml(x)).join("");
+    // More controls, in tabs: Charging (the plug, the battery, Automatic), Full charge, then the
+    // settings: sentences, by their `tab` (Settings unless given)
+    const tabs = [
+      {
+        name: "Charging",
+        html: `<div class="row"><div class="title"><ha-icon icon="mdi:power-plug-outline"></ha-icon><span>Plug</span></div>
+          <div class="end"><button class="offb" data-plug role="switch" aria-label="Plug"></button></div></div>
+          <div class="why"></div>
+          <div class="srcs ksrcs">
+            <div class="tr" data-src="battery"><ha-icon icon="mdi:battery"></ha-icon><span class="tx"><span class="l">Battery</span><span class="v"></span></span></div>
+            ${a.charging ? `<div class="tr" data-src="charging"><ha-icon icon="mdi:battery-charging-outline"></ha-icon><span class="tx"><span class="l">Charging state</span><span class="v"></span></span></div>` : ""}
+          </div>
+          <div class="grp kgrp" data-g="charge"><div class="title"><ha-icon icon="mdi:battery-sync-outline"></ha-icon><span>Automatic</span></div>
+            <div class="end"><span class="val" data-gv="charge"></span>${r.automatic ? `<button class="offb" data-auto role="switch" aria-label="Automatic"></button>` : ""}</div>
+            <div class="sent">Charges to ${pct("stop_at", "Stop at")} once it drops under ${pct("start_below", "Start below")}.</div>
+            ${a.home ? `<div class="note" data-homenote></div>` : ""}</div>`,
+      },
+    ];
+    if (a.full_charge)
+      tabs.push({
+        name: "Full charge",
+        html: `<div class="grp nobtn" data-g="full"><div class="title"><ha-icon icon="mdi:battery-charging-100"></ha-icon><span>Full charge</span></div>
+          <div class="end"><span class="val" data-fullv></span></div>
+          <div class="note">Charges to 100% ${sch ? "between these times" : "while it's on"}, if it's under ${esc(a.full_below ?? 95)}%.</div></div>
+          ${sch ? `<div class="ksch"></div>` : ""}`,
+      });
+    for (const x of c.settings || []) {
+      const name = x.tab || "Settings";
+      let t = tabs.find((y) => y.name === name);
+      if (!t) tabs.push((t = { name, html: "" }));
+      t.html += this._xSentHtml(x);
+    }
     this.shadowRoot.innerHTML = `<style>${CSS(colorsOf(c), radiusOf(c))}${APPLIANCE_CSS}${CHARGER_CSS}</style><ha-card>
       <div class="tile" role="button" tabindex="0" aria-label="${esc(title)}">
         <div class="face"><div class="fill"></div></div>
@@ -2970,9 +3007,6 @@ class KnitApplianceCard extends HTMLElement {
         <button class="exp" aria-label="More for ${esc(title)}" aria-expanded="false"><ha-icon icon="mdi:chevron-down"></ha-icon></button>
       </div>
       <div class="panel" hidden>
-        <div class="part"><div class="row"><div class="title"><ha-icon icon="mdi:power-plug-outline"></ha-icon><span>Plug</span></div>
-          <div class="end"><button class="offb" data-plug role="switch" aria-label="Plug"></button></div></div>
-          <div class="why"></div></div>
         ${
           c.media?.session
             ? `<div class="part" data-np hidden><div class="row"><div class="title"><ha-icon icon="mdi:music"></ha-icon><span>Now playing</span></div><div class="end"><span class="val" data-npst></span></div></div>
@@ -2980,28 +3014,13 @@ class KnitApplianceCard extends HTMLElement {
             <div class="mctl"><button class="chip" data-mc="previous" aria-label="Previous"><ha-icon icon="mdi:skip-previous"></ha-icon></button><button class="chip pp" data-mc="play_pause" aria-label="Play or pause"><ha-icon icon="mdi:play"></ha-icon></button><button class="chip" data-mc="next" aria-label="Next"><ha-icon icon="mdi:skip-next"></ha-icon></button></div></div></div>`
             : ""
         }
-        <div class="part"><div class="srcs">
-          <div class="tr" data-src="battery"><ha-icon icon="mdi:battery"></ha-icon><span class="tx"><span class="l">Battery</span><span class="v"></span></span></div>
-          ${a.charging ? `<div class="tr" data-src="charging"><ha-icon icon="mdi:battery-charging-outline"></ha-icon><span class="tx"><span class="l">Charging state</span><span class="v"></span></span></div>` : ""}
-        </div></div>
-        <div class="part"><div class="grp" data-g="charge"><div class="title"><ha-icon icon="mdi:battery-sync-outline"></ha-icon><span>Automatic</span></div>
-          <div class="end"><span class="val" data-gv="charge"></span>${r.automatic ? `<button class="offb" data-auto role="switch" aria-label="Automatic"></button>` : ""}</div>
-          <div class="sent">Charges to ${pct("stop_at", "Stop at")} once it drops under ${pct("start_below", "Start below")}.</div>
-          ${a.home ? `<div class="note" data-homenote></div>` : ""}</div></div>
-        ${
-          a.full_charge
-            ? `<div class="part"><div class="grp nobtn" data-g="full"><div class="title"><ha-icon icon="mdi:battery-charging-100"></ha-icon><span>Full charge</span></div>
-          <div class="end"><span class="val" data-fullv></span></div>
-          <div class="note">Charges to 100% ${sch ? "between these times" : "while it's on"}, if it's under ${esc(a.full_below ?? 95)}%.</div></div>
-          ${sch ? `<div class="ksch"></div>` : ""}</div>`
-            : ""
-        }
-        ${
-          extras
-            ? `<div class="part"><button class="xrow" data-ctl aria-expanded="false"><ha-icon icon="mdi:tune-variant"></ha-icon><span class="lb">More controls</span><ha-icon class="chev" icon="mdi:chevron-down"></ha-icon></button>
-          <div class="mset" hidden>${extras}</div></div>`
-            : ""
-        }
+        <div class="part"><button class="xrow" data-ctl aria-expanded="false"><ha-icon icon="mdi:tune-variant"></ha-icon><span class="lb">More controls</span><ha-icon class="chev" icon="mdi:chevron-down"></ha-icon></button>
+          <div class="mset" hidden>
+            <div class="ktabs" role="tablist" style="--cols: ${tabs.length}">${tabs
+              .map((t, i) => `<button class="chip" role="tab" data-ctab="${i}" aria-selected="false">${esc(t.name)}</button>`)
+              .join("")}</div>
+            ${tabs.map((t, i) => `<div class="kpane" data-cpane="${i}" hidden>${t.html}</div>`).join("")}
+          </div></div>
       </div></ha-card>`;
     this._chBind();
     this._setOpen(this._open);
@@ -3023,6 +3042,8 @@ class KnitApplianceCard extends HTMLElement {
       toggle();
     });
     this.$("[data-ctl]")?.addEventListener("click", () => this._showCtl(!this._ctlOpen));
+    this.$$("[data-ctab]").forEach((b) => b.addEventListener("click", () => this._chTabTo(Number(b.dataset.ctab))));
+    this._chTabTo(this._chTab ?? 0);
     // the plug and Automatic: On / Off
     const flip = (key, id) => {
       const on = this._hold(key, this._st(id)?.state === "on");
@@ -3062,6 +3083,18 @@ class KnitApplianceCard extends HTMLElement {
     this._xBind();
     const box = this.$(".ksch");
     if (box) this._schBind(box);
+  }
+
+  // More controls' tab i (kept while the card redraws)
+  _chTabTo(i) {
+    const n = this.$$("[data-ctab]").length;
+    this._chTab = i < n ? i : 0;
+    this.$$("[data-ctab]").forEach((b) => {
+      const on = Number(b.dataset.ctab) === this._chTab;
+      b.classList.toggle("on", on);
+      b.setAttribute("aria-selected", String(on));
+    });
+    this.$$("[data-cpane]").forEach((p) => (p.hidden = Number(p.dataset.cpane) !== this._chTab));
   }
 
   // a number entity / helper set to v, snapped to its step and kept in its range
