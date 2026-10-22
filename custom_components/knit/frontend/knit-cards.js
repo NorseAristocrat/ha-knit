@@ -67,7 +67,7 @@
  *   collapse_others: false                   # optional: opening this card leaves the others open
  */
 
-const SLC_VERSION = "51";
+const SLC_VERSION = "52";
 const PENDING_MS = 8000;
 const RING = 2 * Math.PI * 19;
 // which cards are open (and their More controls), so a redraw (as the editor does) keeps it
@@ -2723,7 +2723,7 @@ const CHARGER_CSS = `
   .tile.hero .n { font-size: 15px; }
   .tile .s2 { position: relative; font-size: 12px; opacity: 0.85; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .tile.hero .s { margin-top: 2px; }
-  .tmc { position: relative; flex: none; display: flex; gap: 4px; }
+  .tmc { position: relative; flex: none; display: flex; align-items: center; align-self: center; gap: 4px; }
   .tmc button {
     width: 34px; height: 34px; border-radius: 17px; border: 1px solid var(--soft); background: rgba(0, 0, 0, 0.25); color: var(--prime);
     display: flex; align-items: center; justify-content: center; padding: 0; cursor: pointer; --mdc-icon-size: 20px;
