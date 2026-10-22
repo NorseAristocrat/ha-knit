@@ -67,7 +67,7 @@
  *   collapse_others: false                   # optional: opening this card leaves the others open
  */
 
-const SLC_VERSION = "46";
+const SLC_VERSION = "47";
 const PENDING_MS = 8000;
 const RING = 2 * Math.PI * 19;
 // which cards are open (and their More controls), so a redraw (as the editor does) keeps it
@@ -2660,6 +2660,9 @@ const APPLIANCE_CSS = `
  * quarter-hours, tap to change or add a block; read and saved with schedule/list and
  * schedule/update, which Home Assistant only allows for admin users).
  *
+ *   media:                               # optional: what's playing on the device, with previous / play-pause /
+ *     session: sensor.x_media_session    # next (an Android phone or player with the Home Assistant app: its
+ *     notify: notify.mobile_app_x        # Media session sensor, and its notify action for command_media)
  *   timers:                              # optional: countdowns shown on the tile while they run, first
  *     - entity: timer.office_music_pause # ("Music pauses in 0:04 · 47% ..."), the ring draining round the icon
  *       label: Music pauses in
@@ -2694,6 +2697,14 @@ const chargeWord = (s) =>
 const CHARGER_CSS = `
   .why { font-size: 12px; opacity: 0.8; margin: 2px 0 0 28px; }
   .grp.nobtn > .note { margin-right: 0; }
+  /* now playing: the song, then previous / play-pause / next */
+  .np { display: flex; align-items: center; gap: 10px; margin: 2px 0 0 28px; min-width: 0; }
+  .np .tx { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+  .np .t { font-size: 13px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .np .a { font-size: 12px; opacity: 0.75; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .mctl { display: flex; gap: 6px; flex: none; }
+  .mctl .chip { width: 40px; padding: 0; --mdc-icon-size: 20px; }
+  .mctl .chip.pp { width: 48px; }
   .grp + .ksch { margin-top: 10px; }
   /* the full-charge schedule: a day is 96 quarter-hour bars, full height inside a block */
   .kdays { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 4px; }
@@ -2962,6 +2973,13 @@ class KnitApplianceCard extends HTMLElement {
         <div class="part"><div class="row"><div class="title"><ha-icon icon="mdi:power-plug-outline"></ha-icon><span>Plug</span></div>
           <div class="end"><button class="offb" data-plug role="switch" aria-label="Plug"></button></div></div>
           <div class="why"></div></div>
+        ${
+          c.media?.session
+            ? `<div class="part" data-np hidden><div class="row"><div class="title"><ha-icon icon="mdi:music"></ha-icon><span>Now playing</span></div><div class="end"><span class="val" data-npst></span></div></div>
+          <div class="np"><div class="tx"><span class="t"></span><span class="a"></span></div>
+            <div class="mctl"><button class="chip" data-mc="previous" aria-label="Previous"><ha-icon icon="mdi:skip-previous"></ha-icon></button><button class="chip pp" data-mc="play_pause" aria-label="Play or pause"><ha-icon icon="mdi:play"></ha-icon></button><button class="chip" data-mc="next" aria-label="Next"><ha-icon icon="mdi:skip-next"></ha-icon></button></div></div></div>`
+            : ""
+        }
         <div class="part"><div class="srcs">
           <div class="tr" data-src="battery"><ha-icon icon="mdi:battery"></ha-icon><span class="tx"><span class="l">Battery</span><span class="v"></span></span></div>
           ${a.charging ? `<div class="tr" data-src="charging"><ha-icon icon="mdi:battery-charging-outline"></ha-icon><span class="tx"><span class="l">Charging state</span><span class="v"></span></span></div>` : ""}
@@ -3023,6 +3041,24 @@ class KnitApplianceCard extends HTMLElement {
         this._setNum(id, v);
       });
     });
+    // previous / play-pause / next: sent to the app that's playing (or paused), through the device's
+    // Home Assistant app; then a fresh report, as its media session sensor lags
+    this.$$("[data-mc]").forEach((b) =>
+      b.addEventListener("click", () => {
+        const m = this._media();
+        if (!m) return;
+        let cmd = b.dataset.mc;
+        if (cmd === "play_pause") {
+          cmd = m.playing ? "pause" : "play";
+          this._pending.media = { value: cmd === "play" ? "Playing" : "Paused", until: Date.now() + PENDING_MS };
+        }
+        const [domain, service] = this._config.media.notify.split(".");
+        const send = (message, data) => this._hass.callService(domain, service, { message, data: { ...data, priority: "high", ttl: 0 } });
+        send("command_media", { media_command: cmd, media_package_name: m.app }).catch(() => undefined);
+        setTimeout(() => send("command_update_sensors", {}).catch(() => undefined), 1500);
+        this._render();
+      })
+    );
     this._xBind();
     const box = this.$(".ksch");
     if (box) this._schBind(box);
@@ -3073,6 +3109,9 @@ class KnitApplianceCard extends HTMLElement {
       })
       .filter(Boolean)
       .sort((x, y) => x.left - y.left)[0];
+    // music playing (media:): the song first; a countdown before that
+    const playing = this._media();
+    if (playing?.playing && playing.title) sub = `${playing.title} · ${sub}`;
     if (soon) sub = `${soon.label} ${clock(soon.left)} · ${sub}`;
     this.$(".ic .rg").style.strokeDashoffset = String(RING * (1 - clamp(soon?.total ? soon.left / soon.total : 0, 0, 1)));
     const tile = this.$(".tile");
@@ -3123,12 +3162,42 @@ class KnitApplianceCard extends HTMLElement {
       const next = fs?.attributes.next_event ? new Date(fs.attributes.next_event) : undefined;
       fv.textContent = !fs ? "—" : fs.state === "on" ? "Now" : next ? dayAmpm(next) : "Off";
     }
+    this._npRender();
     this._xRender();
     if (this.$(".ksch")) {
       // read when opened, and again every few minutes while it's open
       if (!this._schAt || Date.now() - this._schAt > 5 * 60000) this._schLoad();
       this._schRender();
     }
+  }
+
+  // what's playing: the app that's Playing (else the first Paused one) on the media session sensor
+  _media() {
+    const st = this._st(this._config.media?.session);
+    if (!st) return undefined;
+    const apps = Object.keys(st.attributes)
+      .filter((k) => k.startsWith("playback_state_"))
+      .map((k) => ({ app: k.slice(15), state: st.attributes[k] }));
+    const pick = apps.find((x) => x.state === "Playing") || apps.find((x) => x.state === "Paused");
+    if (!pick) return undefined;
+    const at = (k) => st.attributes[`${k}_${pick.app}`];
+    const state = this._hold("media", pick.state);
+    return { app: pick.app, state, playing: state === "Playing", title: at("title"), artist: at("artist"), album: at("album") };
+  }
+
+  _npRender() {
+    const box = this.$("[data-np]");
+    if (!box) return;
+    const m = this._media();
+    box.hidden = !m;
+    if (!m) return;
+    box.querySelector(".t").textContent = m.title || "Unknown title";
+    box.querySelector(".a").textContent = [m.artist, m.album].filter(Boolean).join(" · ");
+    box.querySelector("[data-npst]").textContent = m.playing ? "Playing" : "Paused";
+    const pp = box.querySelector(".pp");
+    pp.classList.toggle("on", m.playing);
+    pp.querySelector("ha-icon").setAttribute("icon", m.playing ? "mdi:pause" : "mdi:play");
+    pp.setAttribute("aria-label", m.playing ? "Pause" : "Play");
   }
 
   _chWhy({ status, level, target, start, plugOn, autoOn, full, homeName, a }) {
