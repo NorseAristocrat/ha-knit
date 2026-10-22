@@ -67,7 +67,7 @@
  *   collapse_others: false                   # optional: opening this card leaves the others open
  */
 
-const SLC_VERSION = "54";
+const SLC_VERSION = "55";
 const PENDING_MS = 8000;
 const RING = 2 * Math.PI * 19;
 // which cards are open (and their More controls), so a redraw (as the editor does) keeps it
@@ -2704,9 +2704,17 @@ const WAVE_BARS = 60; // the hero's waveform
 const CHARGER_CSS = `
   .why { font-size: 12px; opacity: 0.8; margin: 2px 0 0 28px; }
   .grp.nobtn > .note { margin-right: 0; }
-  /* More controls' tabs: one row of chips, the picked one filled; under it its pane */
-  .ktabs { display: grid; grid-template-columns: repeat(var(--cols, 3), minmax(0, 1fr)); gap: 6px; margin-bottom: 12px; }
-  .ktabs .chip { height: 30px; font-size: 12px; }
+  /* More controls' tabs, as the Home TV card's: names on a line, thin dividers between them, the
+     picked one in the card's colour and underlined; under them its pane */
+  .ktabs { display: flex; margin: 0 0 12px; border-bottom: 1px solid var(--line); }
+  .ktab {
+    position: relative; flex: 1 1 0; min-width: 0; height: 36px; padding: 0 4px; display: flex; align-items: center; justify-content: center;
+    font: inherit; font-size: 13px; font-weight: 500; cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    background: none; border: none; border-radius: 0; color: var(--secondary-text-color);
+  }
+  .ktab + .ktab::before { content: ""; position: absolute; left: 0; top: 6px; bottom: 6px; width: 1px; background: var(--line); }
+  .ktab.on { color: var(--prime); }
+  .ktab.on::after { content: ""; position: absolute; left: 10px; right: 10px; bottom: -1px; height: 2px; border-radius: 1px; background: var(--prime); }
   .ksrcs { margin: 10px 0 0; }
   .kgrp { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--line); }
   /* music playing: the tile is the hero (as the Home TV card): taller, the cover faded in behind
@@ -3045,7 +3053,7 @@ class KnitApplianceCard extends HTMLElement {
         <div class="part"><button class="xrow" data-ctl aria-expanded="false"><ha-icon icon="mdi:tune-variant"></ha-icon><span class="lb">More controls</span><ha-icon class="chev" icon="mdi:chevron-down"></ha-icon></button>
           <div class="mset" hidden>
             <div class="ktabs" role="tablist" style="--cols: ${tabs.length}">${tabs
-              .map((t, i) => `<button class="chip" role="tab" data-ctab="${i}" aria-selected="false">${esc(t.name)}</button>`)
+              .map((t, i) => `<button class="ktab" role="tab" data-ctab="${i}" aria-selected="false">${esc(t.name)}</button>`)
               .join("")}</div>
             ${tabs.map((t, i) => `<div class="kpane" data-cpane="${i}" hidden>${t.html}</div>`).join("")}
           </div></div>
