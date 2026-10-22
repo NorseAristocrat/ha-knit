@@ -67,7 +67,7 @@
  *   collapse_others: false                   # optional: opening this card leaves the others open
  */
 
-const SLC_VERSION = "53";
+const SLC_VERSION = "54";
 const PENDING_MS = 8000;
 const RING = 2 * Math.PI * 19;
 // which cards are open (and their More controls), so a redraw (as the editor does) keeps it
@@ -2720,6 +2720,9 @@ const CHARGER_CSS = `
   .tile .hbg.on { opacity: 0.6; }
   .tile.hero { height: 108px; }
   .tile.hero .fill { display: none; }
+  /* no icon: the cover and the track speak for it (a countdown still leads the charging line) */
+  .tile.hero .ic { display: none; }
+  .tile.hero { padding-left: 14px; }
   .tile.hero .n { font-size: 15px; }
   .tile .s2 { position: relative; font-size: 12px; opacity: 0.85; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   /* the track's progress: a waveform of thin bars, the played part in the card's colour */
