@@ -35,7 +35,8 @@ settings:                        # optional: other helpers as sentences under Mo
 
 The tile fills to the battery level and says what it's doing ("Charging · 43% → 80%"). While music
 plays (`media:`) the tile is a hero: the cover faded in behind, the track, artist · album, then the
-charging line, with previous / play-pause / next on the right and the progress along its foot.
+charging line, with previous / play-pause / next on the right; the progress is a waveform under
+artist · album. The cover is cropped by the card (opened, by the tile's outline and its dashed foot).
 Opened: More controls in tabs: **Charging** (the plug, On / Off, and why
 it's as it is, the battery and charging state, Automatic with "Charges to [80]% once it drops under
 [30]%."), **Full charge** (the schedule), and a tab per `settings:` `tab`. The full-charge schedule (day tabs and a bar of

@@ -67,7 +67,7 @@
  *   collapse_others: false                   # optional: opening this card leaves the others open
  */
 
-const SLC_VERSION = "52";
+const SLC_VERSION = "53";
 const PENDING_MS = 8000;
 const RING = 2 * Math.PI * 19;
 // which cards are open (and their More controls), so a redraw (as the editor does) keeps it
@@ -2700,6 +2700,7 @@ const dayAmpm = (d) => (d.toDateString() === new Date().toDateString() ? ampm(d)
 const chargeWord = (s) =>
   ({ charging: "Charging", full: "Full", discharging: "Not charging", not_charging: "Not charging", on: "Charging", off: "Not charging" })[s] ||
   (s ? s.charAt(0).toUpperCase() + s.slice(1).replace(/_/g, " ") : "—");
+const WAVE_BARS = 60; // the hero's waveform
 const CHARGER_CSS = `
   .why { font-size: 12px; opacity: 0.8; margin: 2px 0 0 28px; }
   .grp.nobtn > .note { margin-right: 0; }
@@ -2711,18 +2712,20 @@ const CHARGER_CSS = `
   /* music playing: the tile is the hero (as the Home TV card): taller, the cover faded in behind
      with a gradient keeping the text readable, three lines (track; artist · album; charging),
      previous / play-pause / next on the right, and the track's progress along its foot */
-  .tile .hbg {
-    position: absolute; inset: 0; background-size: cover; background-position: center 35%; opacity: 0; transition: opacity 0.6s ease;
-    pointer-events: none; border-radius: inherit; overflow: hidden;
-  }
+  /* the cover sits in the tile's face, so the card's outline (and, opened, the tile's own outline
+     with its dashed foot) crops it, and it stays the tile's size when the card opens */
+  .tile .hbg { position: absolute; inset: 0; background-size: cover; background-position: center 35%; opacity: 0; transition: opacity 0.6s ease; pointer-events: none; }
   .tile .hbg::after { content: ""; position: absolute; inset: 0; background: linear-gradient(90deg, var(--ha-card-background, var(--card-background-color, #1c1c1c)) 30%, rgba(0, 0, 0, 0.3)); }
   :host(.light) .tile .hbg::after { background: linear-gradient(90deg, var(--ha-card-background, var(--card-background-color, #fff)) 30%, rgba(255, 255, 255, 0.35)); }
   .tile .hbg.on { opacity: 0.6; }
-  .tile.hero { height: 84px; }
+  .tile.hero { height: 108px; }
   .tile.hero .fill { display: none; }
   .tile.hero .n { font-size: 15px; }
   .tile .s2 { position: relative; font-size: 12px; opacity: 0.85; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .tile.hero .s { margin-top: 2px; }
+  /* the track's progress: a waveform of thin bars, the played part in the card's colour */
+  .wave { position: relative; display: flex; align-items: center; gap: 2px; height: 18px; margin: 5px 0 4px; }
+  .wave i { flex: 1; min-width: 1px; border-radius: 1px; background: var(--soft); opacity: 0.4; transition: background 0.3s, opacity 0.3s; }
+  .wave i.p { background: var(--prime); opacity: 1; }
   .tmc { position: relative; flex: none; display: flex; align-items: center; align-self: center; gap: 4px; }
   .tmc button {
     width: 34px; height: 34px; border-radius: 17px; border: 1px solid var(--soft); background: rgba(0, 0, 0, 0.25); color: var(--prime);
@@ -2731,13 +2734,10 @@ const CHARGER_CSS = `
   :host(.light) .tmc button { background: rgba(255, 255, 255, 0.6); }
   .tmc button.pp { width: 40px; height: 40px; border-radius: 20px; }
   .tmc button.pp.on { background: var(--bg); border-color: var(--bg); color: #fff; }
-  .tbar { position: absolute; left: 0; right: 0; bottom: 0; height: 3px; background: rgba(127, 127, 127, 0.25); }
-  .tbar > i { display: block; height: 100%; width: 0; background: var(--prime); transition: width 1s linear; }
   /* opened, the tile keeps the hero's height (its foot and the panel's corners follow it) */
-  :host(.wide) .tile.hero { height: calc(84px + var(--tab-x)); }
-  :host(.wide.tab) .tile.hero .face { height: 85px; }
-  :host(.wide.tab) .tile.hero::after { top: calc(84px - var(--r)); }
-  :host(.wide) .tile.hero .tbar { bottom: var(--tab-x); }
+  :host(.wide) .tile.hero { height: calc(108px + var(--tab-x)); }
+  :host(.wide.tab) .tile.hero .face { height: 109px; }
+  :host(.wide.tab) .tile.hero::after { top: calc(108px - var(--r)); }
   .grp + .ksch { margin-top: 10px; }
   /* the full-charge schedule: a day is 96 quarter-hour bars, full height inside a block */
   .kdays { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 4px; }
@@ -3028,17 +3028,15 @@ class KnitApplianceCard extends HTMLElement {
     }
     this.shadowRoot.innerHTML = `<style>${CSS(colorsOf(c), radiusOf(c))}${APPLIANCE_CSS}${CHARGER_CSS}</style><ha-card>
       <div class="tile" role="button" tabindex="0" aria-label="${esc(title)}">
-        <div class="face"><div class="fill"></div></div>
-        <div class="hbg"></div>
+        <div class="face"><div class="hbg"></div><div class="fill"></div></div>
         <div class="ic"><svg viewBox="0 0 42 42" aria-hidden="true"><circle class="rg" cx="21" cy="21" r="19" stroke-dasharray="${RING}" stroke-dashoffset="${RING}"></circle></svg><ha-icon icon="${esc(c.icon || "mdi:battery-charging")}"></ha-icon></div>
-        <div class="txt"><div class="n">${esc(title)}</div><div class="s2" hidden></div><div class="s"></div></div>
+        <div class="txt"><div class="n">${esc(title)}</div><div class="s2" hidden></div><div class="wave" hidden aria-hidden="true"></div><div class="s"></div></div>
         ${
           c.media?.notify
             ? `<div class="tmc" hidden><button data-mc="previous" aria-label="Previous"><ha-icon icon="mdi:skip-previous"></ha-icon></button><button class="pp" data-mc="play_pause" aria-label="Play or pause"><ha-icon icon="mdi:play"></ha-icon></button><button data-mc="next" aria-label="Next"><ha-icon icon="mdi:skip-next"></ha-icon></button></div>`
             : ""
         }
         <button class="exp" aria-label="More for ${esc(title)}" aria-expanded="false"><ha-icon icon="mdi:chevron-down"></ha-icon></button>
-        <div class="tbar" hidden><i></i></div>
       </div>
       <div class="panel" hidden>
         <div class="part"><button class="xrow" data-ctl aria-expanded="false"><ha-icon icon="mdi:tune-variant"></ha-icon><span class="lb">More controls</span><ha-icon class="chev" icon="mdi:chevron-down"></ha-icon></button>
@@ -3287,8 +3285,8 @@ class KnitApplianceCard extends HTMLElement {
     if (hero) s2.textContent = [m.artist, m.album].filter(Boolean).join(" · ");
     const keys = tile.querySelector(".tmc");
     if (keys) keys.hidden = !hero || !m.app;
-    const bar = tile.querySelector(".tbar");
-    bar.hidden = !hero;
+    const wave = tile.querySelector(".wave");
+    wave.hidden = !hero;
     const art = this._st(this._config.media?.art);
     const src = hero && art && !NO_VALUE.includes(art.state) && art.attributes.entity_picture ? `${art.attributes.entity_picture}&v=${encodeURIComponent(art.state)}` : "";
     const bg = tile.querySelector(".hbg");
@@ -3298,8 +3296,25 @@ class KnitApplianceCard extends HTMLElement {
     }
     bg.classList.toggle("on", Boolean(src));
     if (!hero) return;
+    // the track's progress as a waveform: bars of made-up heights (the same for a track each time),
+    // the played part in the card's colour
+    const key = `${m.title}|${m.artist}`;
+    if (wave.dataset.key !== key) {
+      wave.dataset.key = key;
+      let h = 2166136261;
+      for (const ch of key) h = Math.imul(h ^ ch.charCodeAt(0), 16777619);
+      const bars = [];
+      for (let i = 0; i < WAVE_BARS; i++) {
+        h = Math.imul(h ^ (h >>> 13), 1274126177) >>> 0;
+        // louder in the middle of a track, quieter at its ends
+        const shape = 0.55 + 0.45 * Math.sin((Math.PI * (i + 0.5)) / WAVE_BARS);
+        bars.push(`<i style="height:${Math.round(18 + 82 * shape * (0.35 + 0.65 * ((h % 1000) / 1000)))}%"></i>`);
+      }
+      wave.innerHTML = bars.join("");
+    }
     const okDur = Number.isFinite(m.dur) && m.dur > 0;
-    bar.querySelector("i").style.width = okDur && Number.isFinite(m.pos) ? `${(100 * m.pos) / m.dur}%` : "0%";
+    const played = okDur && Number.isFinite(m.pos) ? Math.round((WAVE_BARS * m.pos) / m.dur) : 0;
+    wave.querySelectorAll("i").forEach((b, i) => b.classList.toggle("p", i < played));
     const pp = keys?.querySelector(".pp");
     if (pp) {
       pp.classList.toggle("on", m.playing);
