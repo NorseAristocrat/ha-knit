@@ -67,7 +67,7 @@
  *   collapse_others: false                   # optional: opening this card leaves the others open
  */
 
-const SLC_VERSION = "44";
+const SLC_VERSION = "45";
 const PENDING_MS = 8000;
 const RING = 2 * Math.PI * 19;
 // which cards are open (and their More controls), so a redraw (as the editor does) keeps it
@@ -3044,7 +3044,8 @@ class KnitApplianceCard extends HTMLElement {
     const plugOn = this._hold("plug", plug?.state === "on");
     const autoOn = this._hold("auto", this._st(r.automatic)?.state === "on");
     const full = Boolean(a.full);
-    const homeName = a.home ? this._st(a.home)?.attributes.friendly_name || a.home : "";
+    // who it waits for: a person's name, or an on / off sensor's ("Ed home" reads as Ed)
+    const homeName = a.home ? String(this._st(a.home)?.attributes.friendly_name || a.home).replace(/\s+(is\s+)?(at\s+)?home$/i, "") : "";
     // the tile: the battery, filled to its level, and what it's doing
     let sub = "No battery reading";
     if (!st || NO_VALUE.includes(st.state)) sub = "Unavailable";
