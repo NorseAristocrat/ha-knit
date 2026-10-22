@@ -67,7 +67,7 @@
  *   collapse_others: false                   # optional: opening this card leaves the others open
  */
 
-const SLC_VERSION = "50";
+const SLC_VERSION = "51";
 const PENDING_MS = 8000;
 const RING = 2 * Math.PI * 19;
 // which cards are open (and their More controls), so a redraw (as the editor does) keeps it
@@ -2708,31 +2708,36 @@ const CHARGER_CSS = `
   .ktabs .chip { height: 30px; font-size: 12px; }
   .ksrcs { margin: 10px 0 0; }
   .kgrp { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--line); }
-  /* now playing, as the Home TV hero: the cover faded in behind (a gradient keeps the text
-     readable), the cover, the song, its progress, then previous / play-pause / next */
-  .nph { position: relative; overflow: hidden; border-radius: min(var(--rc), 12px); margin: -2px -4px 0; padding: 2px 4px 4px; }
-  .nph .hbg {
-    position: absolute; inset: 0; background-size: cover; background-position: center; opacity: 0; transition: opacity 0.6s ease;
-    pointer-events: none; filter: blur(2px); transform: scale(1.05);
+  /* music playing: the tile is the hero (as the Home TV card): taller, the cover faded in behind
+     with a gradient keeping the text readable, three lines (track; artist · album; charging),
+     previous / play-pause / next on the right, and the track's progress along its foot */
+  .tile .hbg {
+    position: absolute; inset: 0; background-size: cover; background-position: center 35%; opacity: 0; transition: opacity 0.6s ease;
+    pointer-events: none; border-radius: inherit; overflow: hidden;
   }
-  .nph .hbg::after { content: ""; position: absolute; inset: 0; background: linear-gradient(90deg, var(--ha-card-background, var(--card-background-color, #1c1c1c)) 25%, rgba(0, 0, 0, 0.35)); }
-  .nph .hbg.on { opacity: 0.55; }
-  .nph .hfg { position: relative; }
-  .np { display: flex; align-items: center; gap: 12px; margin-top: 6px; min-width: 0; }
-  .np .cover { flex: none; width: 72px; height: 72px; border-radius: 10px; object-fit: cover; box-shadow: 0 2px 6px rgba(0, 0, 0, 0.35); }
-  .np .tx { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
-  .np .t { font-size: 15px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .np .a, .np .al { font-size: 12px; opacity: 0.8; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .np .al { opacity: 0.65; }
-  .hbar { height: 4px; border-radius: 2px; background: rgba(255, 255, 255, 0.15); margin-top: 10px; overflow: hidden; }
-  :host(.light) .hbar { background: rgba(0, 0, 0, 0.12); }
-  .hbar > i { display: block; height: 100%; width: 0; background: var(--prime); transition: width 1s linear; }
-  .htm { font-size: 11px; opacity: 0.8; margin-top: 4px; display: flex; justify-content: space-between; font-variant-numeric: tabular-nums; }
-  .mctl { display: flex; justify-content: center; gap: 8px; margin-top: 10px; }
-  .mctl .chip { width: 48px; height: 38px; padding: 0; --mdc-icon-size: 22px; background: rgba(0, 0, 0, 0.2); }
-  :host(.light) .mctl .chip { background: rgba(255, 255, 255, 0.5); }
-  .mctl .chip.pp { width: 58px; }
-  .mctl .chip.pp.on { background: var(--bg); }
+  .tile .hbg::after { content: ""; position: absolute; inset: 0; background: linear-gradient(90deg, var(--ha-card-background, var(--card-background-color, #1c1c1c)) 30%, rgba(0, 0, 0, 0.3)); }
+  :host(.light) .tile .hbg::after { background: linear-gradient(90deg, var(--ha-card-background, var(--card-background-color, #fff)) 30%, rgba(255, 255, 255, 0.35)); }
+  .tile .hbg.on { opacity: 0.6; }
+  .tile.hero { height: 84px; }
+  .tile.hero .fill { display: none; }
+  .tile.hero .n { font-size: 15px; }
+  .tile .s2 { position: relative; font-size: 12px; opacity: 0.85; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .tile.hero .s { margin-top: 2px; }
+  .tmc { position: relative; flex: none; display: flex; gap: 4px; }
+  .tmc button {
+    width: 34px; height: 34px; border-radius: 17px; border: 1px solid var(--soft); background: rgba(0, 0, 0, 0.25); color: var(--prime);
+    display: flex; align-items: center; justify-content: center; padding: 0; cursor: pointer; --mdc-icon-size: 20px;
+  }
+  :host(.light) .tmc button { background: rgba(255, 255, 255, 0.6); }
+  .tmc button.pp { width: 40px; height: 40px; border-radius: 20px; }
+  .tmc button.pp.on { background: var(--bg); border-color: var(--bg); color: #fff; }
+  .tbar { position: absolute; left: 0; right: 0; bottom: 0; height: 3px; background: rgba(127, 127, 127, 0.25); }
+  .tbar > i { display: block; height: 100%; width: 0; background: var(--prime); transition: width 1s linear; }
+  /* opened, the tile keeps the hero's height (its foot and the panel's corners follow it) */
+  :host(.wide) .tile.hero { height: calc(84px + var(--tab-x)); }
+  :host(.wide.tab) .tile.hero .face { height: 85px; }
+  :host(.wide.tab) .tile.hero::after { top: calc(84px - var(--r)); }
+  :host(.wide) .tile.hero .tbar { bottom: var(--tab-x); }
   .grp + .ksch { margin-top: 10px; }
   /* the full-charge schedule: a day is 96 quarter-hour bars, full height inside a block */
   .kdays { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 4px; }
@@ -3024,21 +3029,18 @@ class KnitApplianceCard extends HTMLElement {
     this.shadowRoot.innerHTML = `<style>${CSS(colorsOf(c), radiusOf(c))}${APPLIANCE_CSS}${CHARGER_CSS}</style><ha-card>
       <div class="tile" role="button" tabindex="0" aria-label="${esc(title)}">
         <div class="face"><div class="fill"></div></div>
+        <div class="hbg"></div>
         <div class="ic"><svg viewBox="0 0 42 42" aria-hidden="true"><circle class="rg" cx="21" cy="21" r="19" stroke-dasharray="${RING}" stroke-dashoffset="${RING}"></circle></svg><ha-icon icon="${esc(c.icon || "mdi:battery-charging")}"></ha-icon></div>
-        <div class="txt"><div class="n">${esc(title)}</div><div class="s"></div></div>
-        <button class="exp" aria-label="More for ${esc(title)}" aria-expanded="false"><ha-icon icon="mdi:chevron-down"></ha-icon></button>
-      </div>
-      <div class="panel" hidden>
+        <div class="txt"><div class="n">${esc(title)}</div><div class="s2" hidden></div><div class="s"></div></div>
         ${
-          c.media?.session
-            ? `<div class="part nph" data-np hidden><div class="hbg"></div><div class="hfg">
-          <div class="row"><div class="title"><ha-icon icon="mdi:music"></ha-icon><span>Now playing</span></div><div class="end"><span class="val" data-npst></span></div></div>
-          <div class="np"><img class="cover" alt="" hidden><div class="tx"><span class="t"></span><span class="a"></span><span class="al"></span></div></div>
-          <div class="hbar"><i></i></div><div class="htm"><span class="pos"></span><span class="dur"></span></div>
-          <div class="mctl"><button class="chip" data-mc="previous" aria-label="Previous"><ha-icon icon="mdi:skip-previous"></ha-icon></button><button class="chip pp" data-mc="play_pause" aria-label="Play or pause"><ha-icon icon="mdi:play"></ha-icon></button><button class="chip" data-mc="next" aria-label="Next"><ha-icon icon="mdi:skip-next"></ha-icon></button></div>
-        </div></div>`
+          c.media?.notify
+            ? `<div class="tmc" hidden><button data-mc="previous" aria-label="Previous"><ha-icon icon="mdi:skip-previous"></ha-icon></button><button class="pp" data-mc="play_pause" aria-label="Play or pause"><ha-icon icon="mdi:play"></ha-icon></button><button data-mc="next" aria-label="Next"><ha-icon icon="mdi:skip-next"></ha-icon></button></div>`
             : ""
         }
+        <button class="exp" aria-label="More for ${esc(title)}" aria-expanded="false"><ha-icon icon="mdi:chevron-down"></ha-icon></button>
+        <div class="tbar" hidden><i></i></div>
+      </div>
+      <div class="panel" hidden>
         <div class="part"><button class="xrow" data-ctl aria-expanded="false"><ha-icon icon="mdi:tune-variant"></ha-icon><span class="lb">More controls</span><ha-icon class="chev" icon="mdi:chevron-down"></ha-icon></button>
           <div class="mset" hidden>
             <div class="ktabs" role="tablist" style="--cols: ${tabs.length}">${tabs
@@ -3090,7 +3092,8 @@ class KnitApplianceCard extends HTMLElement {
     // previous / play-pause / next: sent to the app that's playing (or paused), through the device's
     // Home Assistant app; then a fresh report, as its media session sensor lags
     this.$$("[data-mc]").forEach((b) =>
-      b.addEventListener("click", () => {
+      b.addEventListener("click", (e) => {
+        e.stopPropagation(); // on the tile: not a tap that opens the card
         const m = this._media();
         if (!m?.app) return;
         let cmd = b.dataset.mc;
@@ -3167,9 +3170,6 @@ class KnitApplianceCard extends HTMLElement {
       })
       .filter(Boolean)
       .sort((x, y) => x.left - y.left)[0];
-    // music playing (media:): the song first; a countdown before that
-    const playing = this._media();
-    if (playing?.playing && playing.title) sub = `${playing.title} · ${sub}`;
     if (soon) sub = `${soon.label} ${clock(soon.left)} · ${sub}`;
     this.$(".ic .rg").style.strokeDashoffset = String(RING * (1 - clamp(soon?.total ? soon.left / soon.total : 0, 0, 1)));
     const tile = this.$(".tile");
@@ -3178,6 +3178,7 @@ class KnitApplianceCard extends HTMLElement {
     tile.classList.toggle("on", on);
     this.$("ha-card").classList.toggle("on", on);
     tile.querySelector(".fill").style.width = level !== undefined ? `${clamp(level, 0, 100)}%` : "0%";
+    this._heroRender();
     if (!this._open) return;
     // the plug, and why it's as it is
     const pb = this.$("[data-plug]");
@@ -3220,7 +3221,6 @@ class KnitApplianceCard extends HTMLElement {
       const next = fs?.attributes.next_event ? new Date(fs.attributes.next_event) : undefined;
       fv.textContent = !fs ? "—" : fs.state === "on" ? "Now" : next ? dayAmpm(next) : "Off";
     }
-    this._npRender();
     this._xRender();
     if (this.$(".ksch")) {
       // read when opened, and again every few minutes while it's open
@@ -3272,38 +3272,42 @@ class KnitApplianceCard extends HTMLElement {
     };
   }
 
-  _npRender() {
-    const box = this.$("[data-np]");
-    if (!box) return;
-    const m = this._media();
-    box.hidden = !m;
-    if (!m) return;
-    box.querySelector(".t").textContent = m.title || "Unknown title";
-    box.querySelector(".a").textContent = m.artist || "";
-    box.querySelector(".al").textContent = m.album || "";
-    // its cover (media.art, an image entity), as the thumbnail and the faded backdrop
-    const art = this._st(this._config.media.art);
-    const src = art && !NO_VALUE.includes(art.state) && art.attributes.entity_picture ? `${art.attributes.entity_picture}&v=${encodeURIComponent(art.state)}` : "";
-    const img = box.querySelector(".cover");
-    const bg = box.querySelector(".hbg");
-    if (img.dataset.src !== src) {
-      img.dataset.src = src;
-      if (src) img.src = src;
-      img.hidden = !src;
+  // music (media:): the tile becomes the hero, as the Home TV card: the cover faded in behind, the
+  // track, then artist · album, then the charging line; previous / play-pause / next on the right,
+  // and the track's progress along its foot
+  _heroRender() {
+    const tile = this.$(".tile");
+    const m = this._config.media ? this._media() : undefined;
+    const hero = Boolean(m);
+    tile.classList.toggle("hero", hero);
+    this.classList.toggle("hero", hero);
+    tile.querySelector(".n").textContent = hero ? m.title || "Unknown track" : this._title();
+    const s2 = tile.querySelector(".s2");
+    s2.hidden = !hero;
+    if (hero) s2.textContent = [m.artist, m.album].filter(Boolean).join(" · ");
+    const keys = tile.querySelector(".tmc");
+    if (keys) keys.hidden = !hero || !m.app;
+    const bar = tile.querySelector(".tbar");
+    bar.hidden = !hero;
+    const art = this._st(this._config.media?.art);
+    const src = hero && art && !NO_VALUE.includes(art.state) && art.attributes.entity_picture ? `${art.attributes.entity_picture}&v=${encodeURIComponent(art.state)}` : "";
+    const bg = tile.querySelector(".hbg");
+    if (bg.dataset.src !== src) {
+      bg.dataset.src = src;
       bg.style.backgroundImage = src ? `url("${src}")` : "";
     }
     bg.classList.toggle("on", Boolean(src));
-    // progress: from the last report, moved on while it plays
+    if (!hero) return;
     const okDur = Number.isFinite(m.dur) && m.dur > 0;
-    box.querySelector(".hbar > i").style.width = okDur && Number.isFinite(m.pos) ? `${(100 * m.pos) / m.dur}%` : "0%";
-    box.querySelector(".htm .pos").textContent = Number.isFinite(m.pos) ? clock(m.pos) : "";
-    box.querySelector(".htm .dur").textContent = okDur ? clock(m.dur) : "";
-    box.querySelector("[data-npst]").textContent = m.playing ? "Playing" : "Paused";
-    const pp = box.querySelector(".pp");
-    pp.classList.toggle("on", m.playing);
-    pp.querySelector("ha-icon").setAttribute("icon", m.playing ? "mdi:pause" : "mdi:play");
-    pp.setAttribute("aria-label", m.playing ? "Pause" : "Play");
+    bar.querySelector("i").style.width = okDur && Number.isFinite(m.pos) ? `${(100 * m.pos) / m.dur}%` : "0%";
+    const pp = keys?.querySelector(".pp");
+    if (pp) {
+      pp.classList.toggle("on", m.playing);
+      pp.querySelector("ha-icon").setAttribute("icon", m.playing ? "mdi:pause" : "mdi:play");
+      pp.setAttribute("aria-label", m.playing ? "Pause" : "Play");
+    }
   }
+
 
   _chWhy({ status, level, target, start, plugOn, autoOn, full, homeName, a }) {
     if (!autoOn) return "Automatic is off: the plug is left as it is.";
