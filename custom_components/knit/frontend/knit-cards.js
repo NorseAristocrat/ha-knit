@@ -67,7 +67,7 @@
  *   collapse_others: false                   # optional: opening this card leaves the others open
  */
 
-const SLC_VERSION = "43";
+const SLC_VERSION = "44";
 const PENDING_MS = 8000;
 const RING = 2 * Math.PI * 19;
 // which cards are open (and their More controls), so a redraw (as the editor does) keeps it
@@ -2720,6 +2720,7 @@ const CHARGER_CSS = `
   }
   :host(.light) .stimes input[type="time"] { color-scheme: light; }
   .sedit .chips { margin-top: 0; }
+  .ksch .chips.copy { margin-top: 10px; }
 `;
 
 class KnitApplianceCard extends HTMLElement {
@@ -3264,21 +3265,27 @@ class KnitApplianceCard extends HTMLElement {
           <div class="shd"><div class="title">${WEEK_SHORT[day]} · ${slotTime(ed.from)}–${slotTime(ed.to % SLOTS)}</div>
             <button class="x" data-es="close" aria-label="Close"><ha-icon icon="mdi:close"></ha-icon></button></div>
           <div class="stimes">From <input type="time" step="900" data-ef value="${slotTime(ed.from)}" aria-label="From"> to <input type="time" step="900" data-et value="${slotTime(ed.to % SLOTS)}" aria-label="To"></div>
-          <div class="chips" style="--cols: 2">${
-            mine ? `<button class="chip" data-es="clear">Clear copied</button>` : `<button class="chip" data-es="copy">Copy ${WEEK_SHORT[day]}</button>`
-          }<button class="chip" data-es="del">Delete</button></div>
+          <div class="chips" style="--cols: 1"><button class="chip" data-es="del">Delete</button></div>
         </div>`
       : "";
-    // something copied (another day, or another schedule): paste it onto this day
-    const paste =
-      schClip && !mine && !ed
-        ? `<div class="chips" style="--cols: 2"><button class="chip" data-es="paste">Paste ${esc(schClip.label)}${schClip.entity === this._schEntity() ? "" : ` (${esc(schClip.from)})`}</button><button class="chip" data-es="clear">Clear copied</button></div>`
-        : "";
+    // Copy schedule (the whole day shown), then Paste schedule on another day tab (here or on
+    // another Knit card's schedule), as the Home heating card's
+    const from = schClip && (schClip.entity === this._schEntity() ? schClip.label : `${schClip.label} of ${schClip.from}`);
+    const clip = `<div class="chips copy" style="--cols: 1"><button class="chip" data-es="${schClip ? (mine ? "clear" : "paste") : "copy"}">${
+      schClip ? (mine ? "Clear copied schedule" : "Paste schedule") : "Copy schedule"
+    }</button></div><div class="shint">${
+      schClip
+        ? mine
+          ? `${WEEK_SHORT[day]} is copied. Open another day to paste it.`
+          : `Copied: ${esc(from)}. Pasting replaces ${WEEK_SHORT[day]} here.`
+        : `Copies ${WEEK_SHORT[day]}, to paste onto another day.`
+    }</div>`;
     return `${tabs}
       <div class="sbar">${cells.join("")}${nowMark}</div>
       <div class="hours">${[0, 3, 6, 9, 12, 15, 18, 21].map((h) => `<span>${h}</span>`).join("")}</div>
       <div class="shint">${blocks.length ? "Tap a block to change it, or a gap to add one." : "No full charge this day. Tap a time to add one."}</div>
-      ${editor}${paste}
+      ${editor}
+      ${clip}
       ${this._schMsg ? `<div class="smsg ${this._schMsg.startsWith("Couldn't") ? "err" : ""}">${esc(this._schMsg)}</div>` : ""}`;
   }
 
@@ -3335,15 +3342,25 @@ class KnitApplianceCard extends HTMLElement {
       if (act === "copy") {
         schClip = { entity: this._schEntity(), day, label: WEEK_SHORT[day], from: this._title(), blocks: this._schBlocks(day) };
         this._schEdit = undefined;
-        this._schMsg = `${WEEK_SHORT[day]} copied. Open another day to paste it.`;
+        this._schMsg = "";
       }
       if (act === "clear") {
         schClip = undefined;
         this._schMsg = "";
       }
+      // pasting replaces the day: a second tap to be sure
       if (act === "paste" && schClip) {
+        const b = e.target.closest("[data-es]");
+        if (!b.classList.contains("sure")) {
+          b.classList.add("sure");
+          b.textContent = "Sure?";
+          setTimeout(() => b.isConnected && b.classList.contains("sure") && ((b.textContent = "Paste schedule"), b.classList.remove("sure")), 3000);
+          return;
+        }
         const { blocks, label } = schClip;
+        this._schEdit = undefined;
         this._schMsg = `Pasted ${label} onto ${WEEK_SHORT[day]}.`;
+        schClip = undefined;
         this._schWrite((sch) =>
           Object.fromEntries(
             WEEK.map((d, i) => [
