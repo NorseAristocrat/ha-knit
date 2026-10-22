@@ -67,7 +67,7 @@
  *   collapse_others: false                   # optional: opening this card leaves the others open
  */
 
-const SLC_VERSION = "42";
+const SLC_VERSION = "43";
 const PENDING_MS = 8000;
 const RING = 2 * Math.PI * 19;
 // which cards are open (and their More controls), so a redraw (as the editor does) keeps it
@@ -2676,6 +2676,9 @@ const slotOf = (t) => {
 const slotTime = (s) => `${String(Math.floor((s * 15) / 60)).padStart(2, "0")}:${String((s * 15) % 60).padStart(2, "0")}`;
 // schedule time strings: an end of 24:00 is stored as 24:00:00
 const slotStore = (s) => `${slotTime(s)}:00`;
+// a copied day of a full-charge schedule ({ entity, day, blocks }), to paste onto another day here
+// or on another Knit card; kept in memory only (a refresh forgets it), pasting leaves it copied
+let schClip;
 // "4am", "4:30pm"; with the day once it isn't today ("Mon 4am")
 const ampm = (d) => `${d.getHours() % 12 || 12}${d.getMinutes() ? `:${String(d.getMinutes()).padStart(2, "0")}` : ""}${d.getHours() < 12 ? "am" : "pm"}`;
 const dayAmpm = (d) => (d.toDateString() === new Date().toDateString() ? ampm(d) : `${WEEK_SHORT[(d.getDay() + 6) % 7]} ${ampm(d)}`);
@@ -3254,19 +3257,28 @@ class KnitApplianceCard extends HTMLElement {
       cells.push(`<i data-slot="${s}" class="${[b || sel ? "b" : "", sel ? "sel" : ""].filter(Boolean).join(" ")}" title="${slotTime(s)}"></i>`);
     }
     const nowMark = day === (now.getDay() + 6) % 7 ? `<span class="now" style="left:${(((now.getHours() * 60 + now.getMinutes()) / 1440) * 100).toFixed(2)}%"></span>` : "";
+    // this day is the one copied
+    const mine = schClip && schClip.entity === this._schEntity() && schClip.day === day;
     const editor = ed
       ? `<div class="sedit">
           <div class="shd"><div class="title">${WEEK_SHORT[day]} · ${slotTime(ed.from)}–${slotTime(ed.to % SLOTS)}</div>
             <button class="x" data-es="close" aria-label="Close"><ha-icon icon="mdi:close"></ha-icon></button></div>
           <div class="stimes">From <input type="time" step="900" data-ef value="${slotTime(ed.from)}" aria-label="From"> to <input type="time" step="900" data-et value="${slotTime(ed.to % SLOTS)}" aria-label="To"></div>
-          <div class="chips" style="--cols: 2"><button class="chip" data-es="all">Same every day</button><button class="chip" data-es="del">Delete</button></div>
+          <div class="chips" style="--cols: 2">${
+            mine ? `<button class="chip" data-es="clear">Clear copied</button>` : `<button class="chip" data-es="copy">Copy ${WEEK_SHORT[day]}</button>`
+          }<button class="chip" data-es="del">Delete</button></div>
         </div>`
       : "";
+    // something copied (another day, or another schedule): paste it onto this day
+    const paste =
+      schClip && !mine && !ed
+        ? `<div class="chips" style="--cols: 2"><button class="chip" data-es="paste">Paste ${esc(schClip.label)}${schClip.entity === this._schEntity() ? "" : ` (${esc(schClip.from)})`}</button><button class="chip" data-es="clear">Clear copied</button></div>`
+        : "";
     return `${tabs}
       <div class="sbar">${cells.join("")}${nowMark}</div>
       <div class="hours">${[0, 3, 6, 9, 12, 15, 18, 21].map((h) => `<span>${h}</span>`).join("")}</div>
       <div class="shint">${blocks.length ? "Tap a block to change it, or a gap to add one." : "No full charge this day. Tap a time to add one."}</div>
-      ${editor}
+      ${editor}${paste}
       ${this._schMsg ? `<div class="smsg ${this._schMsg.startsWith("Couldn't") ? "err" : ""}">${esc(this._schMsg)}</div>` : ""}`;
   }
 
@@ -3320,10 +3332,26 @@ class KnitApplianceCard extends HTMLElement {
         this._schSaveEdit(true);
         this._schEdit = undefined;
       }
-      if (act === "all" && this._schEdit) {
-        const blocks = this._schBlocks(day);
-        this._schMsg = `${WEEK_SHORT[day]}'s times copied to every day.`;
-        this._schWrite(() => Object.fromEntries(WEEK.map((d) => [d, blocks.map((x) => ({ from: slotStore(x.from), to: slotStore(x.to) }))])));
+      if (act === "copy") {
+        schClip = { entity: this._schEntity(), day, label: WEEK_SHORT[day], from: this._title(), blocks: this._schBlocks(day) };
+        this._schEdit = undefined;
+        this._schMsg = `${WEEK_SHORT[day]} copied. Open another day to paste it.`;
+      }
+      if (act === "clear") {
+        schClip = undefined;
+        this._schMsg = "";
+      }
+      if (act === "paste" && schClip) {
+        const { blocks, label } = schClip;
+        this._schMsg = `Pasted ${label} onto ${WEEK_SHORT[day]}.`;
+        this._schWrite((sch) =>
+          Object.fromEntries(
+            WEEK.map((d, i) => [
+              d,
+              (i === day ? blocks : (sch[d] || []).map((b) => ({ from: slotOf(b.from), to: slotOf(b.to) || SLOTS }))).map((b) => ({ from: slotStore(b.from), to: slotStore(b.to) })),
+            ])
+          )
+        );
       }
       if (act) this._schRender();
     });

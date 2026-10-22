@@ -33,7 +33,7 @@ settings:                        # optional: other helpers as sentences under Mo
 The tile fills to the battery level and says what it's doing ("Charging · 43% → 80%"). Opened:
 the plug (On / Off) and why it's as it is, the battery and charging state, Automatic with
 "Charges to [80]% once it drops under [30]%.", and the full-charge schedule (day tabs and a bar of
-quarter-hours: tap a block to change it, a gap to add one; Same every day copies the day to the
-others). Editing the schedule needs an admin user (Home Assistant's schedule/update).
+quarter-hours: tap a block to change it, a gap to add one; Copy (beside Delete) copies the day,
+then Paste on another day tab, or on another Knit card's schedule, puts it there). Editing the schedule needs an admin user (Home Assistant's schedule/update).
 
 [← Back to the README](../README.md)
