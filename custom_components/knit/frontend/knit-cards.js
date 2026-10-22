@@ -67,7 +67,7 @@
  *   collapse_others: false                   # optional: opening this card leaves the others open
  */
 
-const SLC_VERSION = "45";
+const SLC_VERSION = "46";
 const PENDING_MS = 8000;
 const RING = 2 * Math.PI * 19;
 // which cards are open (and their More controls), so a redraw (as the editor does) keeps it
@@ -2660,6 +2660,11 @@ const APPLIANCE_CSS = `
  * quarter-hours, tap to change or add a block; read and saved with schedule/list and
  * schedule/update, which Home Assistant only allows for admin users).
  *
+ *   timers:                              # optional: countdowns shown on the tile while they run, first
+ *     - entity: timer.office_music_pause # ("Music pauses in 0:04 · 47% ..."), the ring draining round the icon
+ *       label: Music pauses in
+ *       while: sensor.x_media_session    # optional: only while this entity is in while_state
+ *       while_state: Playing
  *   settings:                            # optional (YAML): more settings under More controls, any
  *     - name: Pause and resume           # input_number / number helpers, as sentences: {entity} is a
  *       icon: mdi:play-pause             # number box, {entity | time} an mm:ss box (in the helper's unit)
@@ -2949,7 +2954,7 @@ class KnitApplianceCard extends HTMLElement {
     this.shadowRoot.innerHTML = `<style>${CSS(colorsOf(c), radiusOf(c))}${APPLIANCE_CSS}${CHARGER_CSS}</style><ha-card>
       <div class="tile" role="button" tabindex="0" aria-label="${esc(title)}">
         <div class="face"><div class="fill"></div></div>
-        <div class="ic"><ha-icon icon="${esc(c.icon || "mdi:battery-charging")}"></ha-icon></div>
+        <div class="ic"><svg viewBox="0 0 42 42" aria-hidden="true"><circle class="rg" cx="21" cy="21" r="19" stroke-dasharray="${RING}" stroke-dashoffset="${RING}"></circle></svg><ha-icon icon="${esc(c.icon || "mdi:battery-charging")}"></ha-icon></div>
         <div class="txt"><div class="n">${esc(title)}</div><div class="s"></div></div>
         <button class="exp" aria-label="More for ${esc(title)}" aria-expanded="false"><ha-icon icon="mdi:chevron-down"></ha-icon></button>
       </div>
@@ -3058,6 +3063,18 @@ class KnitApplianceCard extends HTMLElement {
         manual: `${level}% · Manual`,
       }[status] || `${level}%`;
     }
+    // a countdown running (timers:, e.g. the music pausing): first on the line, and the ring
+    const soon = (this._config.timers || [])
+      .map((t) => {
+        const st = this._st(t.entity);
+        const left = secsLeft(st);
+        if (left === undefined || (t.while && this._st(t.while)?.state !== (t.while_state ?? "on"))) return undefined;
+        return { label: t.label || st.attributes.friendly_name || t.entity, left, total: durationSecs(st.attributes.duration) };
+      })
+      .filter(Boolean)
+      .sort((x, y) => x.left - y.left)[0];
+    if (soon) sub = `${soon.label} ${clock(soon.left)} · ${sub}`;
+    this.$(".ic .rg").style.strokeDashoffset = String(RING * (1 - clamp(soon?.total ? soon.left / soon.total : 0, 0, 1)));
     const tile = this.$(".tile");
     tile.querySelector(".s").textContent = sub;
     const on = status === "charging";
