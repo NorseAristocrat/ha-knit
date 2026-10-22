@@ -24,7 +24,7 @@ sensor (`charging` / `full`, or on / off). Under **Advanced options**: the full-
 type: custom:knit-appliance-card
 device: <the Knit charger>       # or entity: sensor.knit_m300_dap_status
 icon: mdi:music-box-outline
-media: { session: sensor.x_media_session, notify: notify.mobile_app_x }   # optional: now playing + controls
+media: { session: sensor.x_media_session, notify: notify.mobile_app_x, art: image.x_cover_art }   # optional: now playing (a hero with the cover, with art:) + controls
 timers:                          # optional: countdowns on the tile while they run
   - { entity: timer.x, label: Music pauses in, while: sensor.x_media_session, while_state: Playing }
 settings:                        # optional: other helpers as sentences under More controls

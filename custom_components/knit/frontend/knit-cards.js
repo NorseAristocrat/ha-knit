@@ -67,7 +67,7 @@
  *   collapse_others: false                   # optional: opening this card leaves the others open
  */
 
-const SLC_VERSION = "48";
+const SLC_VERSION = "49";
 const PENDING_MS = 8000;
 const RING = 2 * Math.PI * 19;
 // which cards are open (and their More controls), so a redraw (as the editor does) keeps it
@@ -2663,6 +2663,7 @@ const APPLIANCE_CSS = `
  *   media:                               # optional: what's playing on the device, with previous / play-pause /
  *     session: sensor.x_media_session    # next (an Android phone or player with the Home Assistant app: its
  *     notify: notify.mobile_app_x        # Media session sensor, and its notify action for command_media)
+ *     art: image.x_cover_art             # optional: the song's cover (an image entity), as the hero's backdrop
  *   timers:                              # optional: countdowns shown on the tile while they run, first
  *     - entity: timer.office_music_pause # ("Music pauses in 0:04 · 47% ..."), the ring draining round the icon
  *       label: Music pauses in
@@ -2703,14 +2704,31 @@ const CHARGER_CSS = `
   .ktabs .chip { height: 30px; font-size: 12px; }
   .ksrcs { margin: 10px 0 0; }
   .kgrp { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--line); }
-  /* now playing: the song, then previous / play-pause / next */
-  .np { display: flex; align-items: center; gap: 10px; margin: 2px 0 0 28px; min-width: 0; }
-  .np .tx { flex: 1; min-width: 0; display: flex; flex-direction: column; }
-  .np .t { font-size: 13px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .np .a { font-size: 12px; opacity: 0.75; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .mctl { display: flex; gap: 6px; flex: none; }
-  .mctl .chip { width: 40px; padding: 0; --mdc-icon-size: 20px; }
-  .mctl .chip.pp { width: 48px; }
+  /* now playing, as the Home TV hero: the cover faded in behind (a gradient keeps the text
+     readable), the cover, the song, its progress, then previous / play-pause / next */
+  .nph { position: relative; overflow: hidden; border-radius: min(var(--rc), 12px); margin: -2px -4px 0; padding: 2px 4px 4px; }
+  .nph .hbg {
+    position: absolute; inset: 0; background-size: cover; background-position: center; opacity: 0; transition: opacity 0.6s ease;
+    pointer-events: none; filter: blur(2px); transform: scale(1.05);
+  }
+  .nph .hbg::after { content: ""; position: absolute; inset: 0; background: linear-gradient(90deg, var(--ha-card-background, var(--card-background-color, #1c1c1c)) 25%, rgba(0, 0, 0, 0.35)); }
+  .nph .hbg.on { opacity: 0.55; }
+  .nph .hfg { position: relative; }
+  .np { display: flex; align-items: center; gap: 12px; margin-top: 6px; min-width: 0; }
+  .np .cover { flex: none; width: 72px; height: 72px; border-radius: 10px; object-fit: cover; box-shadow: 0 2px 6px rgba(0, 0, 0, 0.35); }
+  .np .tx { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+  .np .t { font-size: 15px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .np .a, .np .al { font-size: 12px; opacity: 0.8; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .np .al { opacity: 0.65; }
+  .hbar { height: 4px; border-radius: 2px; background: rgba(255, 255, 255, 0.15); margin-top: 10px; overflow: hidden; }
+  :host(.light) .hbar { background: rgba(0, 0, 0, 0.12); }
+  .hbar > i { display: block; height: 100%; width: 0; background: var(--prime); transition: width 1s linear; }
+  .htm { font-size: 11px; opacity: 0.8; margin-top: 4px; display: flex; justify-content: space-between; font-variant-numeric: tabular-nums; }
+  .mctl { display: flex; justify-content: center; gap: 8px; margin-top: 10px; }
+  .mctl .chip { width: 48px; height: 38px; padding: 0; --mdc-icon-size: 22px; background: rgba(0, 0, 0, 0.2); }
+  :host(.light) .mctl .chip { background: rgba(255, 255, 255, 0.5); }
+  .mctl .chip.pp { width: 58px; }
+  .mctl .chip.pp.on { background: var(--bg); }
   .grp + .ksch { margin-top: 10px; }
   /* the full-charge schedule: a day is 96 quarter-hour bars, full height inside a block */
   .kdays { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 4px; }
@@ -3009,9 +3027,12 @@ class KnitApplianceCard extends HTMLElement {
       <div class="panel" hidden>
         ${
           c.media?.session
-            ? `<div class="part" data-np hidden><div class="row"><div class="title"><ha-icon icon="mdi:music"></ha-icon><span>Now playing</span></div><div class="end"><span class="val" data-npst></span></div></div>
-          <div class="np"><div class="tx"><span class="t"></span><span class="a"></span></div>
-            <div class="mctl"><button class="chip" data-mc="previous" aria-label="Previous"><ha-icon icon="mdi:skip-previous"></ha-icon></button><button class="chip pp" data-mc="play_pause" aria-label="Play or pause"><ha-icon icon="mdi:play"></ha-icon></button><button class="chip" data-mc="next" aria-label="Next"><ha-icon icon="mdi:skip-next"></ha-icon></button></div></div></div>`
+            ? `<div class="part nph" data-np hidden><div class="hbg"></div><div class="hfg">
+          <div class="row"><div class="title"><ha-icon icon="mdi:music"></ha-icon><span>Now playing</span></div><div class="end"><span class="val" data-npst></span></div></div>
+          <div class="np"><img class="cover" alt="" hidden><div class="tx"><span class="t"></span><span class="a"></span><span class="al"></span></div></div>
+          <div class="hbar"><i></i></div><div class="htm"><span class="pos"></span><span class="dur"></span></div>
+          <div class="mctl"><button class="chip" data-mc="previous" aria-label="Previous"><ha-icon icon="mdi:skip-previous"></ha-icon></button><button class="chip pp" data-mc="play_pause" aria-label="Play or pause"><ha-icon icon="mdi:play"></ha-icon></button><button class="chip" data-mc="next" aria-label="Next"><ha-icon icon="mdi:skip-next"></ha-icon></button></div>
+        </div></div>`
             : ""
         }
         <div class="part"><button class="xrow" data-ctl aria-expanded="false"><ha-icon icon="mdi:tune-variant"></ha-icon><span class="lb">More controls</span><ha-icon class="chev" icon="mdi:chevron-down"></ha-icon></button>
@@ -3215,7 +3236,12 @@ class KnitApplianceCard extends HTMLElement {
     if (!pick) return undefined;
     const at = (k) => st.attributes[`${k}_${pick.app}`];
     const state = this._hold("media", pick.state);
-    return { app: pick.app, state, playing: state === "Playing", title: at("title"), artist: at("artist"), album: at("album") };
+    // the position when it last reported, moved on since if it's playing
+    const dur = Number(at("duration")) / 1000;
+    let pos = Number(at("playback_position")) / 1000;
+    if (state === "Playing" && Number.isFinite(pos)) pos += (Date.now() - Date.parse(st.last_updated)) / 1000;
+    if (Number.isFinite(dur) && dur > 0) pos = clamp(pos, 0, dur);
+    return { app: pick.app, state, playing: state === "Playing", title: at("title"), artist: at("artist"), album: at("album"), pos, dur };
   }
 
   _npRender() {
@@ -3225,7 +3251,25 @@ class KnitApplianceCard extends HTMLElement {
     box.hidden = !m;
     if (!m) return;
     box.querySelector(".t").textContent = m.title || "Unknown title";
-    box.querySelector(".a").textContent = [m.artist, m.album].filter(Boolean).join(" · ");
+    box.querySelector(".a").textContent = m.artist || "";
+    box.querySelector(".al").textContent = m.album || "";
+    // its cover (media.art, an image entity), as the thumbnail and the faded backdrop
+    const art = this._st(this._config.media.art);
+    const src = art && !NO_VALUE.includes(art.state) && art.attributes.entity_picture ? `${art.attributes.entity_picture}&v=${encodeURIComponent(art.state)}` : "";
+    const img = box.querySelector(".cover");
+    const bg = box.querySelector(".hbg");
+    if (img.dataset.src !== src) {
+      img.dataset.src = src;
+      if (src) img.src = src;
+      img.hidden = !src;
+      bg.style.backgroundImage = src ? `url("${src}")` : "";
+    }
+    bg.classList.toggle("on", Boolean(src));
+    // progress: from the last report, moved on while it plays
+    const okDur = Number.isFinite(m.dur) && m.dur > 0;
+    box.querySelector(".hbar > i").style.width = okDur && Number.isFinite(m.pos) ? `${(100 * m.pos) / m.dur}%` : "0%";
+    box.querySelector(".htm .pos").textContent = Number.isFinite(m.pos) ? clock(m.pos) : "";
+    box.querySelector(".htm .dur").textContent = okDur ? clock(m.dur) : "";
     box.querySelector("[data-npst]").textContent = m.playing ? "Playing" : "Paused";
     const pp = box.querySelector(".pp");
     pp.classList.toggle("on", m.playing);
