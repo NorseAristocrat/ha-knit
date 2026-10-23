@@ -67,7 +67,7 @@
  *   collapse_others: false                   # optional: opening this card leaves the others open
  */
 
-const SLC_VERSION = "56";
+const SLC_VERSION = "57";
 const PENDING_MS = 8000;
 const RING = 2 * Math.PI * 19;
 // which cards are open (and their More controls), so a redraw (as the editor does) keeps it
@@ -2668,6 +2668,8 @@ const APPLIANCE_CSS = `
  *                                        # artist, album, duration (s), started; used whenever it has one, as
  *                                        # it's right when the device's app has stopped reporting
  *     app: com.example.player            # optional: the app the controls go to when the session names none
+ *     hold: timer.x_music_resume         # optional: paused, it stays the hero only while this timer runs
+ *                                        # (paused by hand: for the timer's duration), then it's the plain tile
  *   timers:                              # optional: countdowns shown on the tile while they run, first
  *     - entity: timer.office_music_pause # ("Music pauses in 0:04 · 47% ..."), the ring draining round the icon
  *       label: Music pauses in
@@ -3281,6 +3283,8 @@ class KnitApplianceCard extends HTMLElement {
       app: pick?.app || m.app,
       state,
       playing: state === "Playing",
+      // when the session last changed state (e.g. to Paused), if it's about this song
+      since: same ? Date.parse(st.last_changed) : undefined,
       title: server ? server.state : at("title"),
       artist: server ? a.artist : at("artist"),
       album: server ? a.album : at("album"),
@@ -3289,13 +3293,25 @@ class KnitApplianceCard extends HTMLElement {
     };
   }
 
+  // paused (media: hold): the hero stays while the hold timer (e.g. the resume window) runs. Paused
+  // with it idle (by hand, or it's run out): for the timer's duration since the pause, so it never
+  // outlasts a window that has run out
+  _heldPaused(m) {
+    const hold = this._config.media?.hold;
+    if (!hold) return true;
+    const t = this._st(hold);
+    if (secsLeft(t) !== undefined) return true;
+    const total = durationSecs(t?.attributes.duration);
+    return Boolean(total && m.since && Date.now() - m.since < total * 1000);
+  }
+
   // music (media:): the tile becomes the hero, as the Home TV card: the cover faded in behind, the
   // track, then artist · album, then the charging line; previous / play-pause / next on the right,
   // and the track's progress along its foot
   _heroRender() {
     const tile = this.$(".tile");
     const m = this._config.media ? this._media() : undefined;
-    const hero = Boolean(m);
+    const hero = Boolean(m) && (m.playing || this._heldPaused(m));
     tile.classList.toggle("hero", hero);
     this.classList.toggle("hero", hero);
     tile.querySelector(".n").textContent = hero ? m.title || "Unknown track" : this._title();
