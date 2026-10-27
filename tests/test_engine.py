@@ -193,6 +193,50 @@ class AutoOff(unittest.TestCase):
         e.resume()
         self.assertIsNone(e.restore)
 
+    def test_put_back_kept_until_the_light_reports_it(self):
+        e = make(dark_below=5)
+        e.set_light(True, 254, T0)
+        e.set_occupied(False, at(0))
+        e.tick(at(240))  # dimmed to 127
+        e.tick(at(300))
+        e.set_light(False, None, at(301))
+        self.assertEqual(kinds(e.set_occupied(True, at(900))), [(ON, 254)])
+        # reports on at the dimmed level first: sent again, still waiting
+        self.assertEqual(kinds(e.set_light(True, 127, at(901))), [(BRI, 254)])
+        self.assertEqual(e.restore, 254)
+        e.set_brightness(254)
+        self.assertIsNone(e.restore)
+
+    def test_put_back_lost_while_unavailable_is_sent_again(self):
+        e = make(dark_below=5)
+        e.restore = 254  # went off dimmed
+        e.set_occupied(False, T0)
+        e.set_occupied(True, at(10))
+        e.set_light(True, 127, at(11))  # then it drops off the network, the 254 never lands
+        self.assertEqual(kinds(e.light_back(127)), [(BRI, 254)])
+        e.set_brightness(254)
+        self.assertEqual(kinds(e.light_back(254)), [])
+
+    def test_lost_put_back_not_halved_into_the_new_full(self):
+        e = make(dark_below=5)
+        e.restore = 254
+        e.set_occupied(False, T0)
+        e.set_occupied(True, at(10))
+        e.set_light(True, 127, at(11))  # the 254 never lands
+        e.set_occupied(False, at(20))
+        e.tick(at(260))  # dimmed again: 63, but 254 is what comes back
+        self.assertEqual(kinds(e.set_occupied(True, at(270))), [(BRI, 254)])
+
+    def test_set_by_hand_after_put_back_ends_the_wait(self):
+        e = make(dark_below=5)
+        e.restore = 254
+        e.set_occupied(False, T0)
+        e.set_occupied(True, at(10))
+        e.set_light(True, 127, at(11))
+        e.set_brightness(180)  # a person picks a brightness
+        self.assertIsNone(e.restore)
+        self.assertEqual(kinds(e.light_back(180)), [])
+
     def test_failed_turn_on_keeps_the_brightness(self):
         e = make(dark_below=5)
         e.set_occupied(False, T0)

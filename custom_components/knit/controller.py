@@ -138,7 +138,10 @@ class LightController:
             modes = new.attributes.get("supported_color_modes")
             if modes:
                 e.dimmable = self.light.startswith("light.") and any(m != "onoff" for m in modes)
-            if on == e.light_on:
+            if on and e.light_on and old is not None and old.state in NO_VALUE:
+                # back on the network: a brightness sent while it was gone is sent again
+                out = e.light_back(bri)
+            elif on == e.light_on:
                 e.set_brightness(bri)
             else:
                 out = e.set_light(on, bri, now)
