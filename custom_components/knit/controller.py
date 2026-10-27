@@ -7,7 +7,7 @@ import logging
 from datetime import datetime
 
 from homeassistant.const import STATE_ON, STATE_UNAVAILABLE, STATE_UNKNOWN
-from homeassistant.core import Event, EventStateChangedData, HomeAssistant, callback
+from homeassistant.core import Context, Event, EventStateChangedData, HomeAssistant, callback
 from homeassistant.helpers.dispatcher import async_dispatcher_send
 from homeassistant.helpers.event import async_track_point_in_utc_time, async_track_state_change_event
 from homeassistant.util import dt as dt_util
@@ -69,6 +69,9 @@ class LightController:
         self.engine.settings.turn_on = not self.switch_only
         self._unsubs: list = []
         self._wake = None
+        # Knit's own changes carry a parent context (the event that caused them, else this one),
+        # as an automation's do, so other automations don't take them for a person's
+        self._origin = Context()
         self._started = False
 
     # ---- set up / tear down -------------------------------------------------------------
@@ -131,7 +134,7 @@ class LightController:
             # back from a power cut (or a Wi-Fi drop) switched on: off again, if asked to
             old = event.data["old_state"]
             if self.off_after_outage and new.state == STATE_ON and old is not None and old.state in (STATE_UNAVAILABLE,):
-                self.hass.async_create_task(self._call(self.light.split(".")[0], "turn_off", {}))
+                self.hass.async_create_task(self._call(self.light.split(".")[0], "turn_off", {}, self._context(event.context.id)))
             on = new.state == STATE_ON
             bri = new.attributes.get("brightness")
             # what it can do, once it has reported in
@@ -155,7 +158,7 @@ class LightController:
             old = event.data["old_state"]
             if old is not None and old.state in ("on", "off") and old.state != new.state:
                 out += e.set_dark_check(new.state == STATE_ON)
-        self._do(out)
+        self._do(out, event.context.id)
 
     # ---- readings -----------------------------------------------------------------------
 
@@ -200,48 +203,52 @@ class LightController:
 
     # ---- outputs ------------------------------------------------------------------------
 
+    def _context(self, cause: str | None = None) -> Context:
+        return Context(parent_id=cause or self._origin.id)
+
     @callback
-    def _do(self, actions: list[Action]) -> None:
+    def _do(self, actions: list[Action], cause: str | None = None) -> None:
         domain = self.light.split(".")[0]
         for a in actions:
+            ctx = self._context(cause)
             if a.kind == OFF:
-                self.hass.async_create_task(self._turn_off(domain))
+                self.hass.async_create_task(self._turn_off(domain, ctx))
             elif a.kind == ON:
                 data = {"brightness": a.brightness} if a.brightness and domain == "light" else {}
-                self.hass.async_create_task(self._call(domain, "turn_on", data))
+                self.hass.async_create_task(self._call(domain, "turn_on", data, ctx))
             elif a.kind == HAND_BACK and domain == "light":
-                self.hass.async_create_task(self._hand_back(a.brightness))
+                self.hass.async_create_task(self._hand_back(a.brightness, ctx))
             elif a.kind == BRIGHTNESS and domain == "light" and a.brightness:
-                self.hass.async_create_task(self._call("light", "turn_on", {"brightness": a.brightness}))
+                self.hass.async_create_task(self._call("light", "turn_on", {"brightness": a.brightness}, ctx))
         self._update()
 
-    async def _hand_back(self, brightness: int | None) -> None:
+    async def _hand_back(self, brightness: int | None, ctx: Context) -> None:
         """After a dim, with the brightness managed elsewhere: Adaptive Lighting (if it runs this
         light) is told the light is its own again and applies its settings now; otherwise the
         brightness from before the dim is put back."""
         al = "adaptive_lighting"
         if self.hass.services.has_service(al, "set_manual_control") and self.hass.services.has_service(al, "apply"):
             try:
-                await self.hass.services.async_call(al, "set_manual_control", {"lights": [self.light], "manual_control": False}, blocking=True)
-                await self.hass.services.async_call(al, "apply", {"lights": [self.light], "turn_on_lights": False}, blocking=True)
+                await self.hass.services.async_call(al, "set_manual_control", {"lights": [self.light], "manual_control": False}, blocking=True, context=ctx)
+                await self.hass.services.async_call(al, "apply", {"lights": [self.light], "turn_on_lights": False}, blocking=True, context=ctx)
                 return
             except Exception as err:  # noqa: BLE001 (not one of its lights, or its switch is off)
                 _LOGGER.debug("%s: Adaptive Lighting didn't take the brightness back: %s", self.light, err)
         if brightness:
-            await self._call("light", "turn_on", {"brightness": brightness})
+            await self._call("light", "turn_on", {"brightness": brightness}, ctx)
 
-    async def _turn_off(self, domain: str) -> None:
+    async def _turn_off(self, domain: str, ctx: Context) -> None:
         """Off; if that fails with the light still on, the engine (which counted it off) is told,
         or it would never count down again (a light that stays on doesn't report)."""
-        if await self._call(domain, "turn_off", {}):
+        if await self._call(domain, "turn_off", {}, ctx):
             return
         st = self.hass.states.get(self.light)
         if st and st.state == STATE_ON:
-            self._do(self.engine.off_failed(st.attributes.get("brightness"), dt_util.utcnow()))
+            self._do(self.engine.off_failed(st.attributes.get("brightness"), dt_util.utcnow()), ctx.parent_id)
 
-    async def _call(self, domain: str, service: str, data: dict) -> bool:
+    async def _call(self, domain: str, service: str, data: dict, ctx: Context) -> bool:
         try:
-            await self.hass.services.async_call(domain, service, {"entity_id": self.light, **data}, blocking=True)
+            await self.hass.services.async_call(domain, service, {"entity_id": self.light, **data}, blocking=True, context=ctx)
         except Exception as err:  # noqa: BLE001
             _LOGGER.warning("%s: %s.%s failed: %s", self.light, domain, service, err)
             return False
