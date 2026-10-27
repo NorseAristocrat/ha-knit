@@ -130,12 +130,14 @@ class Engine:
             self.dimmed = False
             self.light = None
             return out
-        # came on at (or below) the dimmed level while a brightness is waiting: put it back
+        # came on at (or below) the dimmed level while a brightness is waiting: put it back,
+        # keeping it until the light reports it (a light that drops off the network just then
+        # misses it, and would stay at half from then on)
         if self.restore is not None:
-            if not self.managed_brightness and brightness is not None and brightness <= self.restore // 2 + 3:
+            if not self.managed_brightness and self._at_dim_level(brightness):
                 out.append(Action(BRIGHTNESS, self.restore))
-                self.brightness = self.restore
-            self.restore = None
+            else:
+                self.restore = None
         if not self.paused and self.occupied is False:
             out += self._maybe_start_auto(now)
         return out
@@ -143,6 +145,18 @@ class Engine:
     def set_brightness(self, brightness: int | None) -> None:
         if self.light_on:
             self.brightness = brightness
+            # on and not dimmed, now above the dimmed level: put back (or set by hand)
+            if self.restore is not None and not self.dimmed and brightness and not self._at_dim_level(brightness):
+                self.restore = None
+
+    def light_back(self, brightness: int | None) -> list[Action]:
+        """The light reports again after dropping off the network, still on: if it's still at
+        the dimmed level with a brightness waiting, that never got through, so it's sent again."""
+        self.set_brightness(brightness)
+        if self.light_on and self.restore is not None and not self.dimmed and not self.managed_brightness and self._at_dim_level(brightness):
+            self.brightness = self.restore
+            return [Action(BRIGHTNESS, self.restore)]
+        return []
 
     def set_lux(self, lux: float | None, now: datetime) -> list[Action]:
         self.lux = lux
@@ -211,7 +225,7 @@ class Engine:
         brightness, the dim was undone some other way and there's nothing to put back."""
         if self.restore is None or not self.light_on:
             return
-        if self.brightness is not None and self.brightness <= self.restore // 2 + 3:
+        if self._at_dim_level(self.brightness):
             self.dimmed = True
         else:
             self.restore = None
@@ -263,6 +277,10 @@ class Engine:
         return out
 
     # ---- internals ------------------------------------------------------------------------
+
+    def _at_dim_level(self, brightness: int | None) -> bool:
+        """At (or below) half the brightness waiting to be put back."""
+        return self.restore is not None and brightness is not None and brightness <= self.restore // 2 + 3
 
     def _maybe_start_auto(self, now: datetime) -> list[Action]:
         s = self.settings
