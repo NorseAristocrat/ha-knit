@@ -11,6 +11,8 @@ its battery between two levels by turning the plug on and off.
   charging. With a charging-state sensor, an old reading (the device off the network, still showing
   its last level) never turns the plug off: a plug turned on to wake the device stays on until it
   reports.
+- **Off** as well while its person is out and the device isn't charging (taken off its dock, or a
+  full charge that ended above Stop at), as nothing else would turn it off.
 - In between the plug is left as it is, so a charge carries on up to Stop at.
 - **Automatic** (a switch) off: the plug is left as it is.
 - A **Status** sensor says what it's doing: Charging, Not charging (plug on, the device isn't

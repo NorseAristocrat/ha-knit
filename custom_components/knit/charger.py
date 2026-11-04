@@ -8,6 +8,8 @@ full-charge schedule and whether its person is home; it says what the plug shoul
   Off     once the battery has reached the target (`stop_at`, or 100% during a full charge)
           and the device says it's charging (or full). A level that's only an old reading
           (the device off the Wi-Fi) never turns it off while the device isn't seen charging.
+          Also off while its person is out and the device isn't charging (taken off its dock,
+          or a full charge that ended above the target), as nothing else would turn it off.
   Between the two it's left as it is, so a charge carries on up to the target, and a plug
   turned on by hand or by something else (to wake the device) stays on until the device
   reports. With Automatic off nothing is changed.
@@ -71,7 +73,7 @@ class Charger:
         start = self.wants_start()
         if start and not self.plug_on:
             return ON
-        if not start and self.plug_on and self.reached():
+        if not start and self.plug_on and (self.reached() or (not self.home and self.charging is False)):
             return OFF
         return None
 

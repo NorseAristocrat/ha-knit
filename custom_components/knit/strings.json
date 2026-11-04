@@ -133,7 +133,7 @@
             },
             "data_description": {
               "full_charge": "A schedule (or any on / off entity): inside its times it charges to 100%, if it's under 95%.",
-              "home": "A person (or any home / on entity): a low battery only turns the plug on while they're home. A charge already going carries on to Stop at.",
+              "home": "A person (or any home / on entity): a low battery only turns the plug on while they're home. A charge already going carries on to Stop at; while they're out, the plug turns off if the device isn't charging.",
               "start_on": "Turn this off if an automation already runs the plug, so the two don't both act on it."
             }
           }
@@ -264,7 +264,7 @@
             },
             "data_description": {
               "full_charge": "A schedule (or any on / off entity): inside its times it charges to 100%, if it's under 95%.",
-              "home": "A person (or any home / on entity): a low battery only turns the plug on while they're home. A charge already going carries on to Stop at.",
+              "home": "A person (or any home / on entity): a low battery only turns the plug on while they're home. A charge already going carries on to Stop at; while they're out, the plug turns off if the device isn't charging.",
               "battery": "Its settings, entities and cards move with it."
             }
           }

@@ -45,6 +45,9 @@ class Decide(unittest.TestCase):
         # a charge already going carries on to the target while they're out
         self.assertEqual(make(80, plug_on=True, charging=True, home=False).decide(), OFF)
         self.assertIsNone(make(60, plug_on=True, charging=True, home=False).decide())
+        # out, and it isn't charging (taken off its dock, or a full charge ended over the target)
+        self.assertEqual(make(93, plug_on=True, charging=False, home=False).decide(), OFF)
+        self.assertEqual(make(50, plug_on=True, charging=False, home=False).decide(), OFF)
 
     def test_full_charge(self):
         self.assertEqual(make(90, full=True).decide(), ON)
